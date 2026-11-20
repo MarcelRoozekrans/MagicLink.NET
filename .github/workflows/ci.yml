@@ -54,6 +54,7 @@ jobs:
           if [ -z "$sln" ]; then echo "No solution yet; nothing to build."; fi
 
       - name: Wait for SQL Server
+        if: steps.sln.outputs.path != ''
         run: |
           for i in $(seq 1 60); do
             if docker exec "${{ job.services.sqlserver.id }}" /opt/mssql-tools18/bin/sqlcmd \
