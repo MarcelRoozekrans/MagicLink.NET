@@ -41,7 +41,7 @@
 **Interfaces:**
 - Produces: `namespace MagicLink; public sealed class MagicLinkOptions { public static readonly TimeSpan MaxTokenLifetime; /* 24h */ public TimeSpan TokenLifetime { get; set; } /* default 15 min */ public void Validate(); /* throws InvalidOperationException naming TokenLifetime */ }`. Phase 1.2 extends this class.
 
-- [ ] **Step 1: Write the build files.**
+- [x] **Step 1: Write the build files.**
   - `global.json`: exact values from Global Constraints.
   - `Directory.Build.props`: copy the AI.Sentinel props with these changes:
     - `TargetFramework` is `net10.0`;
@@ -53,24 +53,24 @@
   - `Directory.Packages.props` sets `ManagePackageVersionsCentrally=true` and holds the analyzer versions from AI.Sentinel, plus `xunit.v3` 4.0.3 and `Microsoft.Testing.Extensions.CodeCoverage`. The latest stable version of the code-coverage package is resolved with `dotnet package search`.
   - `.editorconfig`, `.gitattributes` and `.gitignore` come from AI.Sentinel, with Daedalus's `.gitattributes` contents.
   - A stub `README.md` holding the package name, because the pack in Step 6 packs it. Task 4 fills it in.
-- [ ] **Step 2: Create the projects.**
+- [x] **Step 2: Create the projects.**
   - `src/MagicLink/MagicLink.csproj`: `PackageId` MagicLink, with the description "Passwordless sign-in with magic links: single-use, expiring tokens with pluggable storage and email delivery."
   - `tests/MagicLink.Tests/MagicLink.Tests.csproj`: `OutputType` Exe, `IsPackable` false, `NoWarn` MA0004, references `xunit.v3`, the code-coverage package and the project `src/MagicLink`.
   - Add both projects to `MagicLink.slnx` with `dotnet sln MagicLink.slnx add`.
-- [ ] **Step 3: Write the failing tests** in `MagicLinkOptionsTests`:
+- [x] **Step 3: Write the failing tests** in `MagicLinkOptionsTests`:
   - `TokenLifetime_DefaultsTo15Minutes`: `Assert.Equal(TimeSpan.FromMinutes(15), new MagicLinkOptions().TokenLifetime)`.
   - `Validate_AcceptsDefault`: `new MagicLinkOptions().Validate()` does not throw.
   - `Validate_AcceptsMaximum`: a lifetime of `TimeSpan.FromHours(24)` does not throw.
   - `Validate_RejectsOutOfRange`, a `[Theory]` over the tick values `0`, `-1` and `TimeSpan.FromHours(24).Ticks + 1`. `Assert.Throws<InvalidOperationException>` must throw, and the message must contain `TokenLifetime`.
-- [ ] **Step 4: Run** `dotnet test`. Expected: compile failure, because `MagicLinkOptions` does not exist yet.
-- [ ] **Step 5: Implement `MagicLinkOptions`** per the Interfaces block. The class has XML docs on every public member.
-- [ ] **Step 6: Verify.**
+- [x] **Step 4: Run** `dotnet test`. Expected: compile failure, because `MagicLinkOptions` does not exist yet.
+- [x] **Step 5: Implement `MagicLinkOptions`** per the Interfaces block. The class has XML docs on every public member.
+- [x] **Step 6: Verify.**
   - `dotnet build -c Release` has 0 warnings.
   - `dotnet test` passes on net10.0.
   - `dotnet format whitespace . --folder --verify-no-changes` exits 0.
   - `dotnet pack src/MagicLink -c Release -p:Version=0.0.0-ci -o artifacts` writes `MagicLink.0.0.0-ci.nupkg`.
   - `dotnet pack src/MagicLink -c Release -o artifacts` fails with `MLVERSION001`.
-- [ ] **Step 7: Commit** with `build: scaffold solution with core project and tests`.
+- [x] **Step 7: Commit** with `build: scaffold solution with core project and tests`.
 
 ### Task 2: CI and baseline workflows
 
@@ -80,7 +80,7 @@
 **Interfaces:**
 - Produces: the job names `build-test`, `pack` and `commitlint` in workflow `CI`, and `baseline` in workflow `baseline-checks`. Task 4 requires these names.
 
-- [ ] **Step 1: Write `ci.yml`.**
+- [x] **Step 1: Write `ci.yml`.**
   - It runs on push to main and on pull requests to main, with `concurrency` cancelling in-progress runs per ref and top-level `permissions: contents: read`.
   - Job `build-test`, `runs-on: ubuntu-latest`, `permissions: contents: read, id-token: write`:
     1. checkout v7;
@@ -93,23 +93,23 @@
     8. codecov-action v7 with `use_oidc: true`, the same files, `disable_search: true` and `fail_ci_if_error: false`.
   - Job `pack` (needs `build-test`): set up the same way, then `dotnet pack MagicLink.slnx -c Release -p:Version=0.0.0-ci -o nupkg`, and fail if `nupkg/` has no `.nupkg`.
   - Job `commitlint`: copy Daedalus's, PR-only, including the `skip-commitlint` label opt-out.
-- [ ] **Step 2: Write the other files.**
+- [x] **Step 2: Write the other files.**
   - `baseline-checks.yml` and `history-scan.yml` per the ci-baseline README, with `solution: MagicLink.slnx` and `dotnet-version: global-json`.
   - `codecov.yml` is the exact ci-baseline block.
   - `coverage.config.xml` is AI.Sentinel's, with the module include regex `.*MagicLink.*\.dll$`.
   - `.commitlintrc.yml` is Daedalus's, with the comment referring to MagicLink.NET.
-- [ ] **Step 3: Verify.**
+- [x] **Step 3: Verify.**
   - Every workflow parses: `python3 -c "import yaml,sys;[yaml.safe_load(open(f)) for f in sys.argv[1:]]" .github/workflows/*.yml`.
   - If `actionlint` is available, run it.
   - Run the Step 1 test command locally and check that `find TestResults -name '*.cobertura.xml'` lists at least 1 file for the net10.0 test app.
-- [ ] **Step 4: Commit** with `ci: add build, test, coverage, commitlint and baseline workflows`.
+- [x] **Step 4: Commit** with `ci: add build, test, coverage, commitlint and baseline workflows`.
 
 ### Task 3: Release workflow and repository variables
 
 **Files:**
 - Create: `.github/workflows/release-please.yml`, `release-please-config.json`, `.release-please-manifest.json`
 
-- [ ] **Step 1: Write `release-please.yml`** from AI.Sentinel's.
+- [x] **Step 1: Write `release-please.yml`** from AI.Sentinel's.
   - Drop the `native` job, the RID-package steps and the archive steps.
   - `publish` needs only `release-please` and runs when `release_created == 'true'`, or on `workflow_dispatch` on main.
   - Its steps:
@@ -123,36 +123,36 @@
     8. `gh release upload "$TAG" --clobber nupkg/*.nupkg`;
     9. ci-baseline `sbom@v1` with `solution: MagicLink.slnx` and `tag: ${{ env.TAG }}`.
   - Keep the step that catches feat and fix commits release-please dropped silently, and the release bot token step.
-- [ ] **Step 2: Verify the triggers and the config.**
+- [x] **Step 2: Verify the triggers and the config.**
   - The YAML parses.
   - `grep -n "release_created == 'true'" .github/workflows/release-please.yml` matches the `publish` job's `if`.
   - The config has the house changelog sections, release-type `simple`, `bump-minor-pre-major`, `bump-patch-for-minor-pre-major` and `"initial-version": "0.1.0"`.
   - The manifest is `{}`.
-- [ ] **Step 3: Set the repository variables.**
+- [x] **Step 3: Set the repository variables.**
   - `gh variable set RELEASE_BOT_CLIENT_ID` and `gh variable set NUGET_USER` on MarcelRoozekrans/MagicLink.NET, with the values from AI.Sentinel.
   - Verify with `gh variable list -R MarcelRoozekrans/MagicLink.NET`.
-- [ ] **Step 4: Commit** with `ci: add release-please workflow publishing to nuget.org`.
+- [x] **Step 4: Commit** with `ci: add release-please workflow publishing to nuget.org`.
 
 ### Task 4: Repo docs, PR and required checks
 
 **Files:**
 - Create: `README.md`, `AGENTS.md`, `.github/renovate.json`, `.github/pull_request_template.md`
 
-- [ ] **Step 1: Write the docs.**
+- [x] **Step 1: Write the docs.**
   - `README.md`: the project goal from the roadmap design, the planned package list with "coming soon" marks, the licence, and status "pre-release".
   - `AGENTS.md`: the build, test and format commands; the layout rules from Global Constraints; the commit rules, including no nested parentheses in commit bodies.
   - `renovate.json` and the PR template are copied from AI.Sentinel or Daedalus and stripped of anything specific to those repos.
   - Apply anti-slop to the prose.
-- [ ] **Step 2: Commit, push and open the PR.**
+- [x] **Step 2: Commit, push and open the PR.**
   - Commit with `docs: add README, contributor notes and repo templates`.
   - Push the branch.
   - Open the PR titled `build: scaffold repo, CI and release pipeline (phase 1.1)`.
-- [ ] **Step 3: Wait for CI and set the ruleset.**
+- [x] **Step 3: Wait for CI and set the ruleset.**
   - Read the check names the PR reported.
   - When every name in Global Constraints is present and green, add the `required_status_checks` rule to ruleset 27747701: strict policy, GitHub Actions checks with `integration_id` 15368, and `codecov/project` without one.
   - Verify by reading the ruleset back.
   - If `codecov/project` has not reported, require the others and file an issue to add it.
-- [ ] **Step 4: Merge** with a squash merge once every required check is green.
+- [x] **Step 4: Merge** with a squash merge once every required check is green.
 
 ## Checks
 
