@@ -59,10 +59,16 @@ internal sealed partial class TokenRepository(IAsyncDbConnection connection)
 
     // OpenIddict 7.9.0's EF Core rule: created before the threshold, and either not inactive or valid, or under an
     // authorization that is not valid, or expired. IS DISTINCT FROM keeps C#'s null semantics.
-    [Command("DELETE FROM magiclink.tokens WHERE id IN (SELECT t.id FROM magiclink.tokens t " +
-        "LEFT JOIN magiclink.authorizations a ON a.id = t.authorization_id WHERE t.creation_date < @threshold " +
-        "AND ((t.status IS DISTINCT FROM 'inactive' AND t.status IS DISTINCT FROM 'valid') " +
-        "OR (a.id IS NOT NULL AND a.status IS DISTINCT FROM 'valid') OR t.expiration_date < now()) ORDER BY t.id LIMIT 1000)")] // LIMIT matches StoreFilter.PruneBatch.
+    private const string Prunable =
+        "creation_date < @threshold AND ((status IS DISTINCT FROM 'inactive' AND status IS DISTINCT FROM 'valid') " +
+        "OR EXISTS (SELECT 1 FROM magiclink.authorizations a WHERE a.id = magiclink.tokens.authorization_id AND a.status IS DISTINCT FROM 'valid') " +
+        "OR expiration_date < now())";
+
+    // The subquery picks a batch; the outer WHERE repeats the rule, because PostgreSQL re-checks only the outer WHERE
+    // on a row another transaction updated meanwhile, and that update may have made the row worth keeping.
+    // LIMIT matches StoreFilter.PruneBatch.
+    [Command("DELETE FROM magiclink.tokens WHERE id IN (SELECT id FROM magiclink.tokens WHERE " + Prunable +
+        " ORDER BY id LIMIT 1000) AND " + Prunable)]
     public partial ValueTask<int> PruneBatchAsync(DateTimeOffset threshold, CancellationToken cancellationToken);
 
     [Command(Revoke + Filters)]

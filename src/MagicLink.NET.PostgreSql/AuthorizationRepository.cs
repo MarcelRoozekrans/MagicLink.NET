@@ -53,9 +53,15 @@ internal sealed partial class AuthorizationRepository(IAsyncDbConnection connect
 
     // OpenIddict 7.9.0's EF Core rule: created before the threshold, not valid or ad-hoc, and no token left.
     // IS DISTINCT FROM keeps C#'s null semantics: a null status is not valid.
-    [Command("DELETE FROM magiclink.authorizations WHERE id IN (SELECT a.id FROM magiclink.authorizations a " +
-        "WHERE a.creation_date < @threshold AND (a.status IS DISTINCT FROM 'valid' OR a.type = 'ad-hoc') " +
-        "AND NOT EXISTS (SELECT 1 FROM magiclink.tokens t WHERE t.authorization_id = a.id) ORDER BY a.id LIMIT 1000)")] // LIMIT matches StoreFilter.PruneBatch.
+    private const string Prunable =
+        "creation_date < @threshold AND (status IS DISTINCT FROM 'valid' OR type = 'ad-hoc') " +
+        "AND NOT EXISTS (SELECT 1 FROM magiclink.tokens t WHERE t.authorization_id = magiclink.authorizations.id)";
+
+    // The subquery picks a batch; the outer WHERE repeats the rule, because PostgreSQL re-checks only the outer WHERE
+    // on a row another transaction updated meanwhile, and that update may have made the row worth keeping.
+    // LIMIT matches StoreFilter.PruneBatch.
+    [Command("DELETE FROM magiclink.authorizations WHERE id IN (SELECT id FROM magiclink.authorizations WHERE " + Prunable +
+        " ORDER BY id LIMIT 1000) AND " + Prunable)]
     public partial ValueTask<int> PruneBatchAsync(DateTimeOffset threshold, CancellationToken cancellationToken);
 
     [Command("UPDATE magiclink.authorizations SET status = 'revoked', concurrency_token = " + NewToken + " WHERE " + Filters)]
