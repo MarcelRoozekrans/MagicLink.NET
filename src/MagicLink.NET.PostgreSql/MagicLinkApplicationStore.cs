@@ -31,7 +31,7 @@ internal sealed class MagicLinkApplicationStore(StoreDatabase database) : IOpenI
         ArgumentNullException.ThrowIfNull(application);
 
         var id = StoreIds.New();
-        var token = NewToken();
+        var token = StoreIds.NewConcurrencyToken();
         var connection = database.Connect();
         await using (connection.ConfigureAwait(false))
         {
@@ -195,7 +195,7 @@ internal sealed class MagicLinkApplicationStore(StoreDatabase database) : IOpenI
         ArgumentNullException.ThrowIfNull(application);
 
         var id = RequireId(application);
-        var token = NewToken();
+        var token = StoreIds.NewConcurrencyToken();
         var connection = database.Connect();
         await using (connection.ConfigureAwait(false))
         {
@@ -210,8 +210,6 @@ internal sealed class MagicLinkApplicationStore(StoreDatabase database) : IOpenI
 
         application.ConcurrencyToken = token;
     }
-
-    private static string NewToken() => Guid.NewGuid().ToString("N");
 
     private static MagicLinkApplication Require(MagicLinkApplication application)
     {

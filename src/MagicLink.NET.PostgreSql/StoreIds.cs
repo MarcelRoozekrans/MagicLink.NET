@@ -7,6 +7,9 @@ internal static class StoreIds
 
     internal static string ToText(Guid id) => id.ToString("D");
 
+    /// <summary>A new concurrency token, written on every insert and update.</summary>
+    internal static string NewConcurrencyToken() => Guid.NewGuid().ToString("N");
+
     /// <summary>Parses an id from OpenIddict. Anything that is no uuid matches no row.</summary>
     internal static bool TryParse(string? id, out Guid value) => Guid.TryParse(id, out value);
 
