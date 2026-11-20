@@ -18,3 +18,22 @@ When you are given one goal, such as "finish milestone First version", work thro
 * Native AOT is a goal, not yet a requirement, until the proof in issue #1 succeeds (ADR-016).
 * Target .NET 10. Package ids are `MagicLink.NET` and `MagicLink.NET.*` (ADR-012).
 * Tests run against real PostgreSQL and SQL Server; CI provides both as service containers (see `.github/workflows/ci.yml`).
+
+## Commands
+
+```bash
+dotnet build -c Release                                 # what CI builds; warnings are errors
+dotnet test                                             # needs MAGICLINK_TEST_POSTGRES and MAGICLINK_TEST_SQLSERVER for database tests
+dotnet format whitespace . --folder --verify-no-changes
+dotnet pack -c Release -p:Version=0.0.0-local -o artifacts
+```
+
+A pack without `-p:Version` fails on purpose with `MLVERSION001`; see `Directory.Build.props`.
+
+## Layout and commits
+
+* `src/<Package>/` holds each shipped package and `tests/<Package>.Tests/` its tests. Every project targets `net10.0`, set once in `Directory.Build.props`.
+* Package versions live only in `Directory.Packages.props`; a `PackageReference` never carries a `Version`.
+* Public members in `src/` need XML docs; the build fails without them.
+* Conventional commits, checked by commitlint on every pull request (`.commitlintrc.yml`). release-please builds the changelog and the version from them. Never put nested parentheses in a commit body: release-please cannot parse such a commit and drops it from the changelog while the workflow still succeeds.
+* Required checks on `main`: `build-test`, `pack`, `commitlint`, `baseline / gitleaks`, `baseline / codeql (csharp)`, `baseline / nuget-audit` and `codecov/project`.

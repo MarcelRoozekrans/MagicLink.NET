@@ -5,13 +5,27 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
-jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
 
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write   # Codecov upload via OIDC, no token secret
+
+    # Tests run against real databases: PostgreSQL holds the own OpenIddict store, and the
+    # read-only source for who may sign in works with PostgreSQL and SQL Server.
     services:
       postgres:
         image: postgres:16
@@ -37,24 +51,22 @@ jobs:
     env:
       MAGICLINK_TEST_POSTGRES: "Host=localhost;Port=5432;Username=magiclink;Password=magiclink;Database=magiclink"
       MAGICLINK_TEST_SQLSERVER: "Server=localhost,1433;User Id=sa;Password=MagicLink!Passw0rd;TrustServerCertificate=True"
-      DOTNET_NOLOGO: "true"
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v7
 
-      - uses: actions/setup-dotnet@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: "10.0.x"
+          global-json-file: global.json
 
-      - name: Find solution
-        id: sln
-        run: |
-          sln=$(ls *.slnx *.sln 2>/dev/null | head -n 1 || true)
-          echo "path=$sln" >> "$GITHUB_OUTPUT"
-          if [ -z "$sln" ]; then echo "No solution yet; nothing to build."; fi
+      # Whitespace and charset follow .editorconfig; folder mode needs no restore or build.
+      - name: Check formatting
+        run: dotnet format whitespace . --folder --verify-no-changes
 
+      # The SQL Server image has no health check of its own, so wait until it answers a query.
       - name: Wait for SQL Server
-        if: steps.sln.outputs.path != ''
         run: |
           for i in $(seq 1 60); do
             if docker exec "${{ job.services.sqlserver.id }}" /opt/mssql-tools18/bin/sqlcmd \
@@ -67,13 +79,74 @@ jobs:
           exit 1
 
       - name: Restore
-        if: steps.sln.outputs.path != ''
-        run: dotnet restore "${{ steps.sln.outputs.path }}"
+        run: dotnet restore MagicLink.NET.slnx
 
       - name: Build
-        if: steps.sln.outputs.path != ''
-        run: dotnet build "${{ steps.sln.outputs.path }}" --no-restore -c Release
+        run: dotnet build MagicLink.NET.slnx --no-restore -c Release
 
+      # One Cobertura file per test app; the gate and Codecov merge them.
       - name: Test
-        if: steps.sln.outputs.path != ''
-        run: dotnet test "${{ steps.sln.outputs.path }}" --no-build -c Release
+        run: >
+          dotnet test MagicLink.NET.slnx --no-build -c Release
+          --coverage --coverage-output-format cobertura --coverage-settings coverage.config.xml
+          --results-directory TestResults
+
+      # Merges the Cobertura reports and fails below 80 percent line coverage, or when codecov.yml
+      # would let a drop in coverage pass quietly.
+      - name: Coverage gate
+        uses: MarcelRoozekrans/ci-baseline/actions/coverage-gate@v1
+        with:
+          reports: TestResults/**/*.cobertura.xml
+
+      - name: Upload coverage to Codecov
+        if: '!cancelled()'
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          files: "TestResults/**/*.cobertura.xml"
+          disable_search: true   # only the files above, not every *.xml the search finds
+          fail_ci_if_error: false
+
+  # Packs every shipped project with a probe version, so a packaging break shows up on the pull
+  # request instead of in the release job. The version guard in Directory.Build.props refuses a
+  # pack without one.
+  pack:
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Pack
+        run: dotnet pack MagicLink.NET.slnx -c Release -p:Version=0.0.0-ci -o nupkg
+
+      - name: Check that packages were written
+        run: |
+          ls nupkg/*.nupkg
+          [ "$(find nupkg -name '*.nupkg' | wc -l)" -gt 0 ]
+
+  commitlint:
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-commitlint')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Lint the commits this pull request adds
+        run: >
+          npx --yes --package @commitlint/cli@21.2.1 --package @commitlint/config-conventional@21.2.0
+          commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose

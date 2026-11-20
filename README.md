@@ -15,6 +15,16 @@ A small identity provider for .NET that signs people in with a link or a short c
 
 What MagicLink.NET should do, and why, is in [docs](docs/README.md): the agreed specifications and the architecture decisions.
 
+
+## Building
+
+```bash
+dotnet build
+dotnet test
+```
+
+The SDK version is pinned in `global.json`. Tests that need PostgreSQL or SQL Server read their connection strings from `MAGICLINK_TEST_POSTGRES` and `MAGICLINK_TEST_SQLSERVER`; CI provides both databases.
+
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/MarcelRoozekrans/MagicLink.NET/blob/main/LICENSE)

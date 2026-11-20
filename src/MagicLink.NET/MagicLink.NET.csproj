@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>MagicLink.NET</PackageId>
+    <Description>A small OpenID Connect provider that signs people in with a link or a short code sent by email. Host it in an ASP.NET Core app with services.Add..., or run it on its own.</Description>
+  </PropertyGroup>
+</Project>

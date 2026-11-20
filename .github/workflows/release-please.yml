@@ -1,0 +1,143 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+  # Republishes an existing release whose publish job failed, for example 0.1.1 after an expired NuGet key.
+  # It builds the tag's code but runs main's workflow file, which the NuGet trusted publishing policy names.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version of the existing release to publish, without the leading v, for example 0.1.1.
+        type: string
+        required: true
+
+# The release-please job acts through the release bot App token, so GITHUB_TOKEN only reads:
+# the dropped-commit check lists open pull requests. The publish job sets its own permissions.
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  release-please:
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      # Pushes and PRs made with GITHUB_TOKEN trigger no workflows, so bot PRs
+      # never got their required checks. A token from the release bot GitHub App
+      # acts as the App, and its pushes trigger CI like anyone else's.
+      - name: Mint a release bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.RELEASE_BOT_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+
+      - name: Release Please
+        uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      # release-please parses every commit with a conventional-commit grammar, and a commit it
+      # cannot parse is dropped from the changelog while this job still reports success.
+      # This checks the outcome rather than the prose: if unreleased feat:/fix: commits exist,
+      # release-please must have produced a release PR or cut a release.
+      - name: Checkout
+        if: ${{ !steps.release.outputs.release_created }}
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Verify no releasable commit was silently dropped
+        if: ${{ !steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Before the first release there is no tag, so the whole history is the unreleased range.
+          last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          range=${last_tag:+$last_tag..}HEAD
+          since=${last_tag:-the start of history}
+
+          releasable=$(git log "$range" --format=%s | grep -cE '^(feat|fix)(\(.+\))?!?:' || true)
+          if [ "$releasable" -eq 0 ]; then
+            echo "No releasable commits since $since."
+            exit 0
+          fi
+
+          if gh pr list --state open --json title --jq '.[].title' | grep -qE '^chore\(main\): release'; then
+            echo "$releasable releasable commit(s) since $since, and a release PR is open."
+            exit 0
+          fi
+
+          echo "::error::$releasable releasable commit(s) exist since $since but release-please produced no release PR. A commit it could not parse is dropped from the changelog while this job still succeeds. Check the Release Please step log for 'commit could not be parsed'."
+          git log "$range" --format='  %h %s' | grep -E '(feat|fix)' || true
+          exit 1
+
+  publish:
+    needs: release-please
+    if: ${{ !cancelled() && (needs.release-please.outputs.release_created == 'true' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write   # NuGet trusted publishing exchanges this job's OIDC token for an API key
+    env:
+      VERSION: ${{ needs.release-please.outputs.version || inputs.version }}
+      TAG: ${{ needs.release-please.outputs.tag_name || format('v{0}', inputs.version) }}
+    steps:
+      # Check out the release tag on both paths. release-please can create the release for a
+      # release PR merged before the commit that triggered this run, so the triggering commit is
+      # not always the released code. The ref is qualified, so a branch with the tag's name cannot
+      # be checked out instead. No git credentials stay behind: the gh steps use GH_TOKEN.
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      # The version guard in Directory.Build.props fails the pack unless the build got the same
+      # -p:Version, so the assemblies and the packages always carry the release version.
+      # No test step: the tests need the PostgreSQL and SQL Server services of ci.yml, and the
+      # release commit already passed CI there as the release pull request.
+      - name: Build
+        run: dotnet build MagicLink.NET.slnx -c Release -p:Version=$VERSION
+
+      - name: Pack
+        run: dotnet pack MagicLink.NET.slnx -c Release --no-build -p:Version=$VERSION -o nupkg
+
+      # Trusted publishing: nuget.org holds a policy for this repository and workflow file, and
+      # NuGet/login swaps this job's OIDC token for a short-lived API key. NUGET_USER is the
+      # nuget.org profile name.
+      - name: Log in to NuGet
+        id: nuget-login
+        uses: NuGet/login@v1
+        with:
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push the packages to NuGet
+        run: dotnet nuget push "nupkg/*.nupkg" --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+      - name: Upload the packages to the GitHub release
+        run: gh release upload "$TAG" --clobber nupkg/*.nupkg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # A CycloneDX SBOM of the solution, attached to the same release. This job runs on main, so
+      # the tag comes from the release-please job's tag_name output, or from the dispatch input.
+      - name: Attach the SBOM to the GitHub release
+        uses: MarcelRoozekrans/ci-baseline/actions/sbom@v1
+        with:
+          solution: MagicLink.NET.slnx
+          tag: ${{ env.TAG }}

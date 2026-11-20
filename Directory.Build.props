@@ -1,0 +1,131 @@
+<Project>
+  <!--
+    Release version guard, modelled on ZeroAlloc.ORM. Keep this block first in the file.
+
+    A package must never ship with a fallback version. Pack fails when:
+      MLVERSION001  no version was supplied, so the package would carry the SDK default 1.0.0;
+      MLVERSION002  the assembly being packed does not carry the package's version, which
+                    happens when the build ran without -p:Version and pack ran with no-build.
+
+    The marker below is true only when the version came from the command line, -p:Version or
+    -p:PackageVersion. MSBuild also turns environment variables into properties, so a stray
+    VERSION variable in a shell or CI job would otherwise count as a release version. The probe
+    tells them apart: a project can overwrite a property that came from the environment, but not
+    a global one from -p. If the probe value sticks, the version was not passed with -p, and the
+    original value is put back. Build, test and publish never run the check; only pack does.
+  -->
+  <PropertyGroup>
+    <_MagicLinkOriginalVersion>$(Version)</_MagicLinkOriginalVersion>
+    <_MagicLinkOriginalPackageVersion>$(PackageVersion)</_MagicLinkOriginalPackageVersion>
+    <Version>__magiclink_probe__</Version>
+    <PackageVersion>__magiclink_probe__</PackageVersion>
+  </PropertyGroup>
+  <PropertyGroup>
+    <MagicLinkVersionSupplied Condition="'$(Version)' != '__magiclink_probe__' or '$(PackageVersion)' != '__magiclink_probe__'">true</MagicLinkVersionSupplied>
+    <Version Condition="'$(Version)' == '__magiclink_probe__'">$(_MagicLinkOriginalVersion)</Version>
+    <PackageVersion Condition="'$(PackageVersion)' == '__magiclink_probe__'">$(_MagicLinkOriginalPackageVersion)</PackageVersion>
+  </PropertyGroup>
+
+  <!-- BeforeTargets GenerateNuspec: after pack's build step, if any, before the nupkg is written. -->
+  <Target Name="MagicLinkVerifyReleaseVersion"
+          BeforeTargets="GenerateNuspec"
+          Condition="'$(IsPackable)' == 'true'">
+    <Error Code="MLVERSION001"
+           Condition="'$(MagicLinkVersionSupplied)' != 'true'"
+           Text="$(MSBuildProjectName): no release version was supplied, so the package would ship as $(PackageVersion). Pass it on the command line: dotnet pack -c Release -p:Version=1.2.3. When packing with --no-build, pass -p:Version to the build step too." />
+
+    <!-- The assemblies that go into the package: one per target framework. -->
+    <ItemGroup>
+      <_MagicLinkPackedTfm Include="$(TargetFrameworks)" Condition="'$(TargetFramework)' == ''" />
+    </ItemGroup>
+    <MSBuild Projects="$(MSBuildProjectFullPath)"
+             Targets="GetTargetPath"
+             Properties="TargetFramework=%(_MagicLinkPackedTfm.Identity)"
+             Condition="'@(_MagicLinkPackedTfm)' != ''">
+      <Output TaskParameter="TargetOutputs" ItemName="_MagicLinkPackedAssembly" />
+    </MSBuild>
+    <ItemGroup>
+      <_MagicLinkPackedAssembly Include="$(TargetPath)" Condition="'$(TargetFramework)' != ''" />
+      <_MagicLinkPackedAssembly Remove="@(_MagicLinkPackedAssembly)" Condition="!Exists('%(FullPath)')" />
+    </ItemGroup>
+    <GetAssemblyIdentity AssemblyFiles="@(_MagicLinkPackedAssembly)">
+      <Output TaskParameter="Assemblies" ItemName="_MagicLinkPackedIdentity" />
+    </GetAssemblyIdentity>
+
+    <!--
+      The SDK derives AssemblyVersion from Version. VersionEquals ignores prerelease and build
+      metadata and pads missing parts with 0, so 1.2.3-alpha.4 matches an assembly at 1.2.3.0.
+    -->
+    <Error Code="MLVERSION002"
+           Condition="!$([MSBuild]::VersionEquals('%(_MagicLinkPackedIdentity.Version)', '$(PackageVersion)'))"
+           Text="$(MSBuildProjectName): the built assembly %(_MagicLinkPackedIdentity.Name) is version %(_MagicLinkPackedIdentity.Version), but the package is $(PackageVersion), so the build did not get the release version. Pass -p:Version=$(PackageVersion) to every command that builds: dotnet build before a pack with --no-build, or dotnet pack itself." />
+  </Target>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <NuGetAudit>true</NuGetAudit>
+    <NuGetAuditMode>all</NuGetAuditMode>
+    <NuGetAuditLevel>moderate</NuGetAuditLevel>
+    <RootNamespace>MagicLink</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Shared NuGet packaging metadata. Each package's csproj sets PackageId and Description. -->
+  <PropertyGroup>
+    <Authors>Marcel Roozekrans</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/MarcelRoozekrans/MagicLink.NET</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/MarcelRoozekrans/MagicLink.NET</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>passwordless;magic-link;oidc;openiddict;authentication;aspnetcore</PackageTags>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(IsPackable)' != 'false'">
+    <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+  <!-- Debugging into the package: Go to Definition and step-into show the original source.
+       The PDB is embedded in each DLL, so consumers need no symbol server setting; Source Link,
+       built into the .NET SDK, maps it to this commit on GitHub. ContinuousIntegrationBuild
+       makes CI builds deterministic and writes /_/ paths instead of the runner's. It applies to
+       the shipped projects under src/ only. -->
+  <PropertyGroup>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+  <!-- Shipped packages carry XML docs, and a public member without one fails the build (CS1591).
+       They are Native AOT compatible: the trim and AOT analyzers run, and their warnings are errors
+       like every other (product-line standards; ADR-016 makes AOT for the host a goal). -->
+  <PropertyGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)'))">
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true' and $(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)'))">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Meziantou.Analyzer">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Roslynator.Analyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="ErrorProne.NET.CoreAnalyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="ErrorProne.NET.Structs">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="ZeroAlloc.Analyzers">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>
