@@ -15,8 +15,8 @@ MagicLink.NET can be hosted inside an existing ASP.NET Core app or run on its ow
 
 **In**
 
-* A NuGet package, the core, to host in an own ASP.NET Core app.
-* A container image, a thin host around that package.
+* NuGet packages to host in an own ASP.NET Core app: the core, `MagicLink.NET`, and its PostgreSQL store, `MagicLink.NET.PostgreSql`, which holds OpenIddict's data (ADR-016).
+* A container image, a thin host around those packages.
 
 **Out**
 
@@ -24,7 +24,7 @@ MagicLink.NET can be hosted inside an existing ASP.NET Core app or run on its ow
 
 ## Acceptance criteria
 
-1. MagicLink.NET can be hosted in an existing ASP.NET Core app through the NuGet package with `services.Add...`, and can run on its own from the container image, with the same behaviour.
+1. MagicLink.NET can be hosted in an existing ASP.NET Core app through the NuGet packages with `services.Add...`, and can run on its own from the container image, with the same behaviour.
 
 ## Open questions
 
