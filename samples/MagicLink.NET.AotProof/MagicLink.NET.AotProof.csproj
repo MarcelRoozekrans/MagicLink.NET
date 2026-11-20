@@ -12,4 +12,7 @@
     <PackageReference Include="OpenIddict.Validation.AspNetCore" />
     <PackageReference Include="OpenIddict.Validation.ServerIntegration" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MagicLink.NET.PostgreSql\MagicLink.NET.PostgreSql.csproj" />
+  </ItemGroup>
 </Project>
