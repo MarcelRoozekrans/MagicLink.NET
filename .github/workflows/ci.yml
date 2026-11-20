@@ -131,6 +131,45 @@ jobs:
           ls nupkg/*.nupkg
           [ "$(find nupkg -name '*.nupkg' | wc -l)" -gt 0 ]
 
+  # Proof that OpenIddict's server stack runs under Native AOT (issue #1, ADR-016). Publishes the proof
+  # app as a native binary, where warnings are errors so any trim or AOT warning fails the publish, then
+  # runs the same flow tests that build-test runs in-process against that binary.
+  aot-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Publish the proof app as Native AOT
+        run: dotnet publish samples/MagicLink.NET.AotProof -c Release -r linux-x64 -o artifacts/aot
+
+      - name: Start the native binary
+        run: |
+          ASPNETCORE_URLS=http://127.0.0.1:5099 ./artifacts/aot/MagicLink.NET.AotProof > aot-proof.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:5099/.well-known/openid-configuration > /dev/null; then
+              echo "The native binary answers."; exit 0
+            fi
+            sleep 1
+          done
+          echo "The native binary did not answer within 60 seconds." >&2
+          exit 1
+
+      - name: Run the flow tests against the native binary
+        env:
+          MAGICLINK_AOT_PROOF_URL: http://127.0.0.1:5099
+        run: dotnet test --project tests/MagicLink.NET.AotProof.Tests -c Release
+
+      - name: Show the native binary's log
+        if: always()
+        run: cat aot-proof.log || true
+
   commitlint:
     if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-commitlint')
     runs-on: ubuntu-latest
