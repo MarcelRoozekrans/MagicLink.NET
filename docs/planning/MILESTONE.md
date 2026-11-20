@@ -10,12 +10,12 @@ Deliver every Spec in `docs/specs/`: MagicLink.NET runs as an OIDC provider on O
 - [ ] Every acceptance criterion in `docs/specs/` holds, with tests where a test can show it
 - [ ] Issues #1–#12 closed, each through a pull request with green CI
 - [x] Required status checks set on the `Main` ruleset
-- [ ] The Native AOT proof result written down
+- [x] The Native AOT proof result written down
 - [ ] All tests passing
 
 ## Phases
 1. Phase 1.1 — Repo scaffolding and CI [complete]
-2. Phase 1.2 — Prove OpenIddict runs under Native AOT [active]
+2. Phase 1.2 — Prove OpenIddict runs under Native AOT [complete]
 3. Phase 1.3 — Own OpenIddict store on PostgreSQL [pending]
 4. Phase 1.4 — Browser sign-in through OIDC [pending]
 5. Phase 1.5 — Pluggable mail sender [pending]

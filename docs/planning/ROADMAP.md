@@ -13,7 +13,7 @@ Design: `docs/superpowers/specs/2026-11-20-roadmap-design.md`. Source of truth: 
 - [ ] Every acceptance criterion in `docs/specs/` holds, with tests where a test can show it
 - [ ] Issues #1–#12 closed, each through a pull request with green CI
 - [x] Required status checks set on the `Main` ruleset
-- [ ] The Native AOT proof result written down
+- [x] The Native AOT proof result written down
 
 ### Phase 1.1: Repo scaffolding and CI [status: complete]
 **Goal:** Solution layout, build/test with PostgreSQL and SQL Server, ci-baseline checks, commitlint, coverage, release-please.
@@ -22,11 +22,12 @@ Design: `docs/superpowers/specs/2026-11-20-roadmap-design.md`. Source of truth: 
 **Plan:** `docs/superpowers/plans/2026-11-20-phase-1-1-scaffolding.md`
 **Completed:** 2026-11-20
 
-### Phase 1.2: Prove OpenIddict runs under Native AOT [status: active]
+### Phase 1.2: Prove OpenIddict runs under Native AOT [status: complete]
 **Goal:** Write down whether OpenIddict's server stack runs in an AOT-compiled ASP.NET Core app.
 **Surface:** Backend
 **HelpWanted:** no
 **Plan:** `docs/superpowers/plans/2026-11-20-phase-1-2-aot-proof.md`
+**Completed:** 2026-11-20
 **Issue:** #1
 
 ### Phase 1.3: Own OpenIddict store on PostgreSQL [status: pending]

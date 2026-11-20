@@ -41,11 +41,11 @@
 - Produces: `public partial class Program` (for `WebApplicationFactory<Program>`); clients `ProofClients.Confidential` = `proof-service` with secret `proof-secret`, `ProofClients.Public` = `proof-cli` with redirect URI `http://localhost/callback`; endpoints `/connect/authorize`, `/connect/token`, `/.well-known/openid-configuration`, `/.well-known/jwks`, `/api/me`.
 - `InMemoryApplicationStore : IOpenIddictApplicationStore<ProofApplication>`; members not needed by the server throw `NotSupportedException`.
 
-- [ ] Step 1: write `InMemoryApplicationStoreTests`: `FindByClientIdAsync("proof-service")` returns the confidential app; unknown, empty id returns null; the client type, redirect URIs and permissions read back as configured.
-- [ ] Step 2: run `dotnet test --project tests/MagicLink.NET.AotProof.Tests` — fails to build.
-- [ ] Step 3: implement the store, `ProofApplication`, and `Program.cs` wiring core (`ReplaceApplicationStore`/`SetDefaultApplicationEntity`), server (endpoints, flows, PKCE required, ephemeral keys, `DisableTokenStorage`, `DisableAuthorizationStorage`, `DisableScopeValidation`, ASP.NET Core passthrough for authorize, transport security off), validation (`UseLocalServer`, `UseAspNetCore`), the authorize handler signing in subject `proof-user`, and `/api/me`. Secret check: the default OpenIddict manager hashes and verifies secrets; the store keeps the hash produced at startup.
-- [ ] Step 4: tests pass; `dotnet build -c Release` clean.
-- [ ] Step 5: commit `test(aot): add OpenIddict proof app with an in-memory application store`.
+- [x] Step 1: write `InMemoryApplicationStoreTests`: `FindByClientIdAsync("proof-service")` returns the confidential app; unknown, empty id returns null; the client type, redirect URIs and permissions read back as configured.
+- [x] Step 2: run `dotnet test --project tests/MagicLink.NET.AotProof.Tests` — fails to build.
+- [x] Step 3: implement the store, `ProofApplication`, and `Program.cs` wiring core (`ReplaceApplicationStore`/`SetDefaultApplicationEntity`), server (endpoints, flows, PKCE required, ephemeral keys, `DisableTokenStorage`, `DisableAuthorizationStorage`, `DisableScopeValidation`, ASP.NET Core passthrough for authorize, transport security off), validation (`UseLocalServer`, `UseAspNetCore`), the authorize handler signing in subject `proof-user`, and `/api/me`. Secret check: the default OpenIddict manager hashes and verifies secrets; the store keeps the hash produced at startup.
+- [x] Step 4: tests pass; `dotnet build -c Release` clean.
+- [x] Step 5: commit `test(aot): add OpenIddict proof app with an in-memory application store`.
 
 ### Task 2: Flow tests, in-process or against a URL
 
@@ -56,10 +56,10 @@
 **Interfaces:**
 - Consumes: Task 1 clients and endpoints.
 
-- [ ] Step 1: write tests: `Discovery_lists_endpoints` (token, authorization, jwks URIs present; `code` and `S256` advertised); `Jwks_has_a_signing_key`; `Code_flow_with_pkce_returns_tokens_that_open_api_me` (`/api/me` returns `proof-user`); `Refresh_grant_returns_a_new_access_token`; `Client_credentials_returns_a_token_that_opens_api_me`; `Wrong_client_secret_is_refused` (`invalid_client`); `Wrong_pkce_verifier_is_refused` (`invalid_grant`); `Unknown_client_gets_no_code`; `Api_me_without_or_with_garbage_token_is_401`.
-- [ ] Step 2: run; fix the proof app until all pass in-process.
-- [ ] Step 3: `dotnet publish samples/MagicLink.NET.AotProof -c Release -r linux-x64 -o artifacts/aot` with zero warnings; start the binary on `http://127.0.0.1:5099`; run the tests with `MAGICLINK_AOT_PROOF_URL=http://127.0.0.1:5099`; record each warning or failure.
-- [ ] Step 4: commit `test(aot): drive the OpenIddict flows in-process or against a URL`.
+- [x] Step 1: write tests: `Discovery_lists_endpoints` (token, authorization, jwks URIs present; `code` and `S256` advertised); `Jwks_has_a_signing_key`; `Code_flow_with_pkce_returns_tokens_that_open_api_me` (`/api/me` returns `proof-user`); `Refresh_grant_returns_a_new_access_token`; `Client_credentials_returns_a_token_that_opens_api_me`; `Wrong_client_secret_is_refused` (`invalid_client`); `Wrong_pkce_verifier_is_refused` (`invalid_grant`); `Unknown_client_gets_no_code`; `Api_me_without_or_with_garbage_token_is_401`.
+- [x] Step 2: run; fix the proof app until all pass in-process.
+- [x] Step 3: `dotnet publish samples/MagicLink.NET.AotProof -c Release -r linux-x64 -o artifacts/aot` with zero warnings; start the binary on `http://127.0.0.1:5099`; run the tests with `MAGICLINK_AOT_PROOF_URL=http://127.0.0.1:5099`; record each warning or failure.
+- [x] Step 4: commit `test(aot): drive the OpenIddict flows in-process or against a URL`.
 
 ### Task 3: CI job and the written result
 
@@ -68,10 +68,10 @@
 - Modify: `docs/specs/magiclink-net-prove-openiddict-runs-under-native-aot.md` (`## Result`)
 - Modify: `README.md` if it lists the layout
 
-- [ ] Step 1: add job `aot-proof`: checkout, setup-dotnet from `global.json`, publish as in Task 2 Step 3, start the binary in the background, wait up to 60 s for discovery, run the flow tests with `MAGICLINK_AOT_PROOF_URL`, print the binary's log on failure.
-- [ ] Step 2: write `## Result` in the Spec: yes or no, OpenIddict 7.9.0 and SDK version, proven flows, not covered (device flow, PostgreSQL store), warnings found, the CI job as the standing check.
-- [ ] Step 3: `dotnet format whitespace . --folder --verify-no-changes`, `dotnet build -c Release`, `dotnet test` pass.
-- [ ] Step 4: commit `ci(aot): publish the proof app as Native AOT and run the flow tests on it`, then `docs(spec): write down the Native AOT proof result`.
+- [x] Step 1: add job `aot-proof`: checkout, setup-dotnet from `global.json`, publish as in Task 2 Step 3, start the binary in the background, wait up to 60 s for discovery, run the flow tests with `MAGICLINK_AOT_PROOF_URL`, print the binary's log on failure.
+- [x] Step 2: write `## Result` in the Spec: yes or no, OpenIddict 7.9.0 and SDK version, proven flows, not covered (device flow, PostgreSQL store), warnings found, the CI job as the standing check.
+- [x] Step 3: `dotnet format whitespace . --folder --verify-no-changes`, `dotnet build -c Release`, `dotnet test` pass.
+- [x] Step 4: commit `ci(aot): publish the proof app as Native AOT and run the flow tests on it`, then `docs(spec): write down the Native AOT proof result`.
 
 ## Checks
 
