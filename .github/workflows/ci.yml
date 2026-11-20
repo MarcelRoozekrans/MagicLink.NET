@@ -1,0 +1,113 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write   # Codecov upload via OIDC, no token secret
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # global.json pins SDK 11; the 10.0.x runtime runs the net10.0 test leg.
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+          dotnet-version: 10.0.x
+
+      # Whitespace and charset follow .editorconfig; folder mode needs no restore or build.
+      - name: Check formatting
+        run: dotnet format whitespace . --folder --verify-no-changes
+
+      - name: Restore
+        run: dotnet restore MagicLink.slnx
+
+      - name: Build
+        run: dotnet build MagicLink.slnx --no-restore -c Release
+
+      # One Cobertura file per test app and target framework; the gate and Codecov merge them.
+      - name: Test
+        run: >
+          dotnet test MagicLink.slnx --no-build -c Release
+          --coverage --coverage-output-format cobertura --coverage-settings coverage.config.xml
+          --results-directory TestResults
+
+      # Merges the Cobertura reports and fails below 80 percent line coverage, or when codecov.yml
+      # would let a drop in coverage pass quietly.
+      - name: Coverage gate
+        uses: MarcelRoozekrans/ci-baseline/actions/coverage-gate@v1
+        with:
+          reports: TestResults/**/*.cobertura.xml
+
+      - name: Upload coverage to Codecov
+        if: '!cancelled()'
+        uses: codecov/codecov-action@v7
+        with:
+          use_oidc: true
+          files: "TestResults/**/*.cobertura.xml"
+          disable_search: true   # only the files above, not every *.xml the search finds
+          fail_ci_if_error: false
+
+  # Packs every shipped project with a probe version, so a packaging break shows up on the pull
+  # request instead of in the release job. The version guard in Directory.Build.props refuses a
+  # pack without one.
+  pack:
+    needs: build-test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Pack
+        run: dotnet pack MagicLink.slnx -c Release -p:Version=0.0.0-ci -o nupkg
+
+      - name: Check that packages were written
+        run: |
+          ls nupkg/*.nupkg
+          [ "$(find nupkg -name '*.nupkg' | wc -l)" -gt 0 ]
+
+  commitlint:
+    if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-commitlint')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 26
+
+      - name: Lint the commits this pull request adds
+        run: >
+          npx --yes --package @commitlint/cli@21.2.1 --package @commitlint/config-conventional@21.2.0
+          commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
