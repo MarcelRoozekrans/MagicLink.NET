@@ -2,7 +2,7 @@
 
 A small identity provider for .NET that signs people in with a link or a short code sent by email, and speaks OpenID Connect (OIDC) to everything else. It is meant for organizations without an identity provider of their own: applications keep speaking plain OIDC, and MagicLink.NET handles the email sign-in behind it.
 
-**Status:** not built yet. The design is agreed; the build starts with a proof that OpenIddict runs under Native AOT.
+**Status:** not built yet. The design is agreed. OpenIddict's server stack is proven to run under Native AOT; the proof app is in `samples/MagicLink.NET.AotProof` and CI re-runs it on every pull request.
 
 ## What it will do
 
