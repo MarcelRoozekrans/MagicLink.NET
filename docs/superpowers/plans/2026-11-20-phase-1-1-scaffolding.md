@@ -101,7 +101,7 @@
 - [ ] **Step 3: Verify.**
   - Every workflow parses: `python3 -c "import yaml,sys;[yaml.safe_load(open(f)) for f in sys.argv[1:]]" .github/workflows/*.yml`.
   - If `actionlint` is available, run it.
-  - Run the Step 1 test command locally and check that `ls TestResults/**/*.cobertura.xml` lists at least 1 file for the net10.0 test app.
+  - Run the Step 1 test command locally and check that `find TestResults -name '*.cobertura.xml'` lists at least 1 file for the net10.0 test app.
 - [ ] **Step 4: Commit** with `ci: add build, test, coverage, commitlint and baseline workflows`.
 
 ### Task 3: Release workflow and repository variables

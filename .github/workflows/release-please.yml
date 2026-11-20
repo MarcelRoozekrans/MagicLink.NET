@@ -96,10 +96,12 @@ jobs:
     steps:
       # Check out the release tag on both paths. release-please can create the release for a
       # release PR merged before the commit that triggered this run, so the triggering commit is
-      # not always the released code.
+      # not always the released code. The ref is qualified, so a branch with the tag's name cannot
+      # be checked out instead. No git credentials stay behind: the gh steps use GH_TOKEN.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.TAG }}
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
 
       - uses: actions/setup-dotnet@v6
         with:
