@@ -6,10 +6,10 @@
 
 ## Stack
 
-**Language / runtime:** .NET 10 and .NET 11 (net10.0, net11.0), C# latest
+**Language / runtime:** .NET 10 (net10.0), C# latest
 **Package manager:** NuGet, central package management (`Directory.Packages.props`)
-**Framework:** ASP.NET Core (integration package only; the core library has no ASP.NET Core dependency)
-**Datastore:** n/a (library; token stores are pluggable: in-memory and ZeroAlloc.ORM)
+**Framework:** ASP.NET Core, OpenIddict (ADR-010)
+**Datastore:** PostgreSQL for the own OpenIddict store through ZeroAlloc.ORM (ADR-016); PostgreSQL and SQL Server read-only for the source of who may sign in (ADR-014)
 **Build:** `dotnet build`
 **Test:** `dotnet test`
 
@@ -36,6 +36,6 @@
 
 ## Deployment
 
-**Deploy target:** nuget.org (MagicLink.* packages)
+**Deploy target:** nuget.org (MagicLink.NET packages) and a container image
 **Environments:** none
-**Deployed by:** release-please workflow publish job on release
+**Deployed by:** release-please workflow publish job on release; the container image publish comes with issue #12

@@ -101,18 +101,16 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-          dotnet-version: 10.0.x
 
       # The version guard in Directory.Build.props fails the pack unless the build got the same
       # -p:Version, so the assemblies and the packages always carry the release version.
+      # No test step: the tests need the PostgreSQL and SQL Server services of ci.yml, and the
+      # release commit already passed CI there as the release pull request.
       - name: Build
-        run: dotnet build MagicLink.slnx -c Release -p:Version=$VERSION
-
-      - name: Test
-        run: dotnet test MagicLink.slnx -c Release --no-build
+        run: dotnet build MagicLink.NET.slnx -c Release -p:Version=$VERSION
 
       - name: Pack
-        run: dotnet pack MagicLink.slnx -c Release --no-build -p:Version=$VERSION -o nupkg
+        run: dotnet pack MagicLink.NET.slnx -c Release --no-build -p:Version=$VERSION -o nupkg
 
       # Trusted publishing: nuget.org holds a policy for this repository and workflow file, and
       # NuGet/login swaps this job's OIDC token for a short-lived API key. NUGET_USER is the
@@ -136,5 +134,5 @@ jobs:
       - name: Attach the SBOM to the GitHub release
         uses: MarcelRoozekrans/ci-baseline/actions/sbom@v1
         with:
-          solution: MagicLink.slnx
+          solution: MagicLink.NET.slnx
           tag: ${{ env.TAG }}

@@ -73,3 +73,15 @@ None.
 | A required check name differs from what the ruleset lists | Every PR is blocked | Add the required checks only after reading the check names the phase PR actually reported |
 | Codecov never reports `codecov/project` on the first PR | `codecov/project` can't be required yet | Require it only once it has reported; otherwise file an issue and require it after the first main push |
 | The secret, App install or NuGet policy is missing at release time | The publish job fails | The publish job can be re-run; AI.Sentinel's republish-by-dispatch input is kept |
+
+## Amendment 2026-11-20: aligned with the agreed specs
+
+While this phase was being built, the agreed specs (`docs/specs/`), the ADRs (`docs/adr/`) and a build-session CI were merged to main. The operator chose to follow them. The phase changed in these ways; where the text above disagrees, this section wins:
+
+- The solution is `MagicLink.NET.slnx`, the core project `src/MagicLink.NET` with package id `MagicLink.NET` (ADR-012), and the tests `tests/MagicLink.NET.Tests`.
+- Target framework `net10.0` only, SDK 10 in `global.json`. Projects under `src/` set `IsAotCompatible` (product-line standards, ADR-016).
+- `MagicLinkOptions` holds the code limits from the confirm-sign-in Spec: `CodeLifetime` of 10 minutes and `MaxCodeAttempts` of 5. The invented `TokenLifetime` and its `Validate()` are gone.
+- `ci.yml` keeps main's PostgreSQL and SQL Server service containers and test connection strings in the `build-test` job.
+- The release `publish` job does not run the tests, because they need those databases; the release commit already passed CI as the release pull request.
+- `AGENTS.md` is folded into main's `CLAUDE.md`. `README.md` is main's, with a Building section and an absolute licence link.
+- The required checks also include `pack`.

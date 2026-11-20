@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/MagicLink/MagicLink.csproj" />
-  </Folder>
-  <Folder Name="/tests/">
-    <Project Path="tests/MagicLink.Tests/MagicLink.Tests.csproj" />
-  </Folder>
-</Solution>

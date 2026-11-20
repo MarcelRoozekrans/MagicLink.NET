@@ -11,6 +11,6 @@
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\MagicLink\MagicLink.csproj" />
+    <ProjectReference Include="..\..\src\MagicLink.NET\MagicLink.NET.csproj" />
   </ItemGroup>
 </Project>

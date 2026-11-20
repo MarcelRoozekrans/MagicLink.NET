@@ -17,5 +17,5 @@ jobs:
       actions: read
     uses: MarcelRoozekrans/ci-baseline/.github/workflows/baseline.yml@v1
     with:
-      solution: MagicLink.slnx
+      solution: MagicLink.NET.slnx
       dotnet-version: global-json

@@ -1,21 +1,20 @@
 # MagicLink.NET
 
-Passwordless sign-in with magic links for ASP.NET Core.
+A small identity provider for .NET that signs people in with a link or a short code sent by email, and speaks OpenID Connect (OIDC) to everything else. It is meant for organizations without an identity provider of their own: applications keep speaking plain OIDC, and MagicLink.NET handles the email sign-in behind it.
 
-A user enters their email address and receives a link. Clicking the link signs them in. Tokens are random, stored only as hashes, expire, and work once.
+**Status:** not built yet. The design is agreed; the build starts with a proof that OpenIddict runs under Native AOT.
 
-> **Status:** pre-1.0. The public API may still change between minor versions.
+## What it will do
 
-## Packages
+* Act as an OIDC provider on [OpenIddict](https://github.com/openiddict/openiddict-core), for browser applications and for command-line tools through the device flow.
+* Send a sign-in email with a link and a short code. Opening the link never signs anyone in; only pressing the button on the page, or typing the code, does. This keeps link-scanning mail filters from using up the link.
+* Decide who may sign in, and with which groups, from an existing database (read-only) or a file in git, and put the groups in the token.
+* Run on its own as a container, or inside an existing ASP.NET Core app as a NuGet package.
 
-| Package | What it does | Status |
-| --- | --- | --- |
-| `MagicLink` | Token generation and validation, store and sender interfaces, in-memory store | in progress |
-| `MagicLink.MailKit` | Sends the link by SMTP through MailKit | coming soon |
-| `MagicLink.AspNetCore` | `AddMagicLink()`, request and verify endpoints, cookie sign-in | coming soon |
-| `MagicLink.ZeroAlloc.Orm` | Token store on ZeroAlloc.ORM | coming soon |
+## How it is designed
 
-All packages target .NET 10 and .NET 11.
+What MagicLink.NET should do, and why, is in [docs](docs/README.md): the agreed specifications and the architecture decisions.
+
 
 ## Building
 
@@ -24,8 +23,8 @@ dotnet build
 dotnet test
 ```
 
-The SDK version is pinned in `global.json`.
+The SDK version is pinned in `global.json`. Tests that need PostgreSQL or SQL Server read their connection strings from `MAGICLINK_TEST_POSTGRES` and `MAGICLINK_TEST_SQLSERVER`; CI provides both databases.
 
 ## License
 
-MIT. See [LICENSE](https://github.com/MarcelRoozekrans/MagicLink.NET/blob/main/LICENSE).
+[MIT](https://github.com/MarcelRoozekrans/MagicLink.NET/blob/main/LICENSE)

@@ -7,93 +7,55 @@
 
 ## Goal
 
-MagicLink.NET is a public NuGet library for passwordless sign-in with magic links in .NET applications. It generates single-use, expiring links, delivers them by email, validates them when clicked, and signs the user in through ASP.NET Core authentication. Token storage and email delivery are pluggable: the library ships an in-memory store, a ZeroAlloc.ORM store and a MailKit sender. At the project level, success means an ASP.NET Core developer can add magic-link sign-in with a few lines of setup, trust it with real users, and replace any piece (store, sender, user mapping) without forking.
+MagicLink.NET is a small identity provider for .NET. It signs people in with a link or a short code sent by email, and speaks OpenID Connect to everything else. It is meant for organizations without an identity provider of their own. The agreed specifications in `docs/specs/` and the decisions in `docs/adr/` are the source; this roadmap only orders the work.
 
 ## Target Users / Stakeholders
 
-- **Primary:** ASP.NET Core developers who want passwordless email sign-in without running an identity server. They need a small setup surface, safe defaults and clear extension points.
-- **Secondary:** the maintainer's own applications, which will adopt it; and ZeroAlloc.ORM users, who get a first-party store.
-- **Out of scope:** non-ASP.NET hosts beyond what the framework-agnostic core allows, full identity-provider features (OAuth/OIDC server, MFA management, user registration UI).
+- **Primary:** organizations whose applications and CLIs need sign-in without running a full identity provider.
+- **Secondary:** the other products in the product line, which use it as their single OIDC identity (product-line ADR-008).
+- **Out of scope:** user registration, MFA management, anything beyond the two ways of delivery.
 
 ## Top-Level Success Criteria
 
-- A new ASP.NET Core app goes from `dotnet add package` to a working sign-in by following the README quickstart, with no other setup than SMTP settings.
-- Tokens are stored only as hashes, expire, and can be used once; this is covered by tests against every shipped store.
-- The store, the email sender and the email-to-user mapping can each be replaced through a public interface, shown in the sample app.
-- 1.0 ships with a reviewed public API, API-compat checks in CI, docs and a security review.
+- Every acceptance criterion of every Spec in `docs/specs/` holds.
+- MagicLink.NET runs inside an ASP.NET Core app through `services.Add...` and on its own from a container image, with the same behaviour.
+- The result of the Native AOT proof is written down, and the host ships as Native AOT if the proof succeeds.
 
 ## Milestones
 
-### Milestone 1: First working sign-in
+### Milestone 1: First version
 
-**Goal:** Ship 0.1 on NuGet with the whole flow working: request a link, receive the email, click it, get signed in.
+**Goal:** Deliver every Spec in `docs/specs/`, tracked as GitHub milestone "First version", issues #1–#12.
 
 **Phases:**
 
 1. Repo scaffolding and CI — `Surface: Infra`
-2. Core tokens and in-memory store — `Surface: Backend`
-3. Email abstraction and MailKit sender — `Surface: Backend`
-4. ASP.NET Core integration — `Surface: Backend`
-5. ZeroAlloc.ORM token store — `Surface: Data`
-6. Sample app and README quickstart — `Surface: Docs`
-
-### Milestone 2: Security hardening
-
-**Goal:** Make the library safe to expose on the public internet by default.
-
-**Phases:**
-
-1. Rate limiting per email address and per IP — `Surface: Backend`
-2. Responses that don't reveal whether an account exists — `Surface: Backend`
-3. Optional binding of a link to the requesting browser — `Surface: Backend`
-4. Audit events and OpenTelemetry metrics — `Surface: Backend`
-5. Threat model and security docs — `Surface: Docs`
-
-### Milestone 3: Extensibility
-
-**Goal:** Let applications shape the emails and plug the sign-in into their existing user model.
-
-**Phases:**
-
-1. Custom and localised email templates — `Surface: Backend`
-2. ASP.NET Core Identity integration package — `Surface: Backend`
-3. Short-code alternative for links opened on another device — `Surface: Backend`
-4. Samples for the new extension points — `Surface: Docs`
-
-### Milestone 4: 1.0
-
-**Goal:** Freeze a reviewed public API and release 1.0.
-
-**Phases:**
-
-1. Public API review and cleanup — `Surface: Refactor`
-2. API-compat checks in CI — `Surface: Infra`
-3. Benchmarks — `Surface: Backend`
-4. Docs site — `Surface: Docs`
-5. Security review and 1.0 release — `Surface: Mixed`
+2. Prove OpenIddict's server stack runs under Native AOT (#1) — `Surface: Backend`
+3. Own OpenIddict store on PostgreSQL, without EF Core (#2) — `Surface: Data`
+4. Browser sign-in through OIDC (#3) — `Surface: Backend`
+5. Pluggable mail sender, SMTP by default, sending in the background (#6) — `Surface: Backend`
+6. Pluggable source for who may sign in, with the git file as first implementation (#7) — `Surface: Backend`
+7. Sign-in page: link with a button, code entry, request bound to the browser (#4) — `Surface: UI`
+8. Same answer for unknown email addresses, refusal logged (#5) — `Surface: Backend`
+9. Database source for PostgreSQL and SQL Server, read-only, checked at startup (#8) — `Surface: Data`
+10. Test command for an email address (#9) — `Surface: Backend`
+11. Refresh tokens (#10) — `Surface: Backend`
+12. NuGet package with `services.Add...` registration (#11) — `Surface: Backend`
+13. Container image (#12) — `Surface: Infra`
 
 ## Dependencies and Ordering Rationale
 
-- **M1 → M2:** hardening needs a working flow to harden; rate limits and response shaping wrap the M1 endpoints.
-- **M2 → M3:** a public sign-in library has to be safe before it grows features. Chosen by the maintainer on 2026-11-20.
-- **M3 → M4:** the API is reviewed and frozen only once all planned extension points exist, so 1.0 doesn't break them later.
-- **Within M1:** scaffolding first so every later phase merges through CI. Core tokens before the integration, because the integration calls the token service. The email phase depends only on the core. The ZeroAlloc.ORM store runs against the store contract tests from phase 1.2. The sample comes last, because it uses everything.
-- **External:** ZeroAlloc.ORM (targets net10.0 and net11.0, which sets this library's target frameworks), MailKit, ASP.NET Core.
+- Scaffolding first, so every issue merges through a pull request with the house checks.
+- #1 before everything else: ADR-016 makes the AOT proof the first step, and its result decides whether later code must stay AOT-clean.
+- #2 before #3: the OIDC flow needs OpenIddict's store.
+- #6 and #7 before #4: the sign-in page sends the email and asks the source who may sign in.
+- #5 needs the page and the sender. #8 and #9 build on the source from #7. #10 builds on the OIDC flow.
+- #11 and #12 package what the other issues built, so they come last.
 
-## Decisions Made in the Brainstorm
+## Later Milestones
 
-- Public NuGet library; target frameworks net10.0 and net11.0, matching ZeroAlloc.ORM.
-- In M1, a verified link signs in a principal carrying the email claim. An optional `IMagicLinkUserResolver` lets the app map the email to its own user and claims, or reject it. ASP.NET Core Identity integration waits for M3.
-- Package split (proposal, settled in phase designs): `MagicLink` (core, no ASP.NET Core dependency), `MagicLink.AspNetCore`, `MagicLink.MailKit`, `MagicLink.ZeroAlloc.Orm`.
-
-## Risk Register
-
-| Risk | Impact | Mitigation |
-|---|---|---|
-| A token-handling flaw in a security library | Account takeover for adopters | Hash-only storage, constant-time comparison, single-use enforced atomically in the store; M2 hardening and an M4 security review |
-| ZeroAlloc.ORM API changes | The store package breaks | Pin the version through central package management; store contract tests catch regressions |
-| Email deliverability problems are blamed on the library | Support load | Keep sending behind an interface and document SMTP setup |
+Not agreed yet. They are added when new Specs are agreed in `docs/specs/`. This deviates from the 3–7 milestone sweep on purpose: the agreed documents are the source, and this roadmap does not invent scope beyond them.
 
 ## Open Questions
 
-None. Per-milestone detail is settled by `new-milestone` and the per-phase brainstorms.
+- Is the package id `MagicLink.NET` free on nuget.org? A prefix reservation has been requested (ADR-012).

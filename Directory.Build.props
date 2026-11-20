@@ -62,7 +62,7 @@
   </Target>
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
@@ -81,7 +81,7 @@
     <RepositoryUrl>https://github.com/MarcelRoozekrans/MagicLink.NET</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
-    <PackageTags>passwordless;magic-link;authentication;aspnetcore</PackageTags>
+    <PackageTags>passwordless;magic-link;oidc;openiddict;authentication;aspnetcore</PackageTags>
   </PropertyGroup>
   <ItemGroup Condition="'$(IsPackable)' != 'false'">
     <None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" Visible="false" />
@@ -95,9 +95,12 @@
   <PropertyGroup>
     <DebugType>embedded</DebugType>
   </PropertyGroup>
-  <!-- Shipped packages carry XML docs, and a public member without one fails the build (CS1591). -->
+  <!-- Shipped packages carry XML docs, and a public member without one fails the build (CS1591).
+       They are Native AOT compatible: the trim and AOT analyzers run, and their warnings are errors
+       like every other (product-line standards; ADR-016 makes AOT for the host a goal). -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)'))">
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
   <PropertyGroup Condition="'$(GITHUB_ACTIONS)' == 'true' and $(MSBuildProjectDirectory.StartsWith('$(MSBuildThisFileDirectory)src$([System.IO.Path]::DirectorySeparatorChar)'))">
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
