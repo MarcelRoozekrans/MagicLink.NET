@@ -69,6 +69,18 @@ public sealed class ApplicationStoreTests(StoreFixture fixture) : IClassFixture<
         Assert.Equal(3, byId.Properties["tier"].GetInt32());
     }
 
+    [Fact]
+    public async Task Default_arrays_from_OpenIddict_are_stored_as_empty()
+    {
+        var application = new MagicLinkApplication { ClientId = "default-arrays-" + Guid.NewGuid(), Permissions = default, RedirectUris = default };
+
+        await Store.CreateAsync(application, Cancel);
+
+        var found = await Store.FindByIdAsync(application.Id!, Cancel);
+        Assert.Empty(found!.Permissions);
+        Assert.Empty(found.RedirectUris);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("not-a-guid")]
