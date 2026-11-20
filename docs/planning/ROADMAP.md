@@ -16,11 +16,11 @@ Design: `docs/superpowers/specs/2026-11-20-roadmap-design.md`
 - [ ] Store contract tests pass against the in-memory and ZeroAlloc.ORM stores
 - [ ] 0.1 packages published to nuget.org by release-please
 
-### Phase 1.1: Repo scaffolding and CI [status: pending]
+### Phase 1.1: Repo scaffolding and CI [status: active]
 **Goal:** Solution layout, build/test workflow, ci-baseline checks, commitlint, release-please and codecov, modelled on Daedalus.NET.
 **Surface:** Infra
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-20-phase-1-1-scaffolding.md`
 
 ### Phase 1.2: Core tokens and in-memory store [status: pending]
 **Goal:** Generate, hash, expire and single-use validate tokens behind a store interface, with an in-memory store and reusable store contract tests.

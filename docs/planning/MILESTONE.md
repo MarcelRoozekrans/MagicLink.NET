@@ -15,7 +15,7 @@ Ship 0.1 on NuGet with the whole magic-link flow working. A user requests a link
 - [ ] 0.1 packages published to nuget.org by release-please
 
 ## Phases
-1. Phase 1.1 — Repo scaffolding and CI [pending]
+1. Phase 1.1 — Repo scaffolding and CI [active]
 2. Phase 1.2 — Core tokens and in-memory store [pending]
 3. Phase 1.3 — Email abstraction and MailKit sender [pending]
 4. Phase 1.4 — ASP.NET Core integration [pending]
