@@ -8,6 +8,10 @@ These rules are for any AI coding session that builds MagicLink.NET, including u
 * Then read `docs/README.md`, every Spec in `docs/specs/` and every ADR in `docs/adr/` of this repository. They say what MagicLink.NET does and why. The issues of a milestone each link to their Spec.
 * From the start of the build, these documents are the source. If a criterion changes while building, update the Spec in `docs/specs/` in the same pull request and mention it in the issue.
 
+## No superpowers skills
+
+Do not use the superpowers skills (`superpowers:*`, such as brainstorming, writing-plans, subagent-driven-development and executing-plans) in this repository. Work straight from the Specs in `docs/specs/` and the ADRs in `docs/adr/`. The existing files under `docs/superpowers/` stay as a record but get no new plans or designs.
+
 ## Unattended runs
 
 When you are given one goal, such as "finish milestone First version", work through the issues of that milestone in the order of their dependencies, following the unattended rules in `standards.md`. At the end, leave a short summary in the milestone's last pull request or in a comment on its issues: what was built, and which open questions were written down.
