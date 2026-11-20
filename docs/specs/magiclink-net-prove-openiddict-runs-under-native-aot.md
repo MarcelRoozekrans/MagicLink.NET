@@ -29,10 +29,9 @@ It is known, and written down, whether OpenIddict's server stack runs under Nati
 **Yes: OpenIddict's server stack runs under Native AOT** (2026-11-20, OpenIddict 7.9.0, .NET SDK 10.0.403, linux-x64).
 
 * The proof app `samples/MagicLink.NET.AotProof` publishes with `PublishAot` and no trim or AOT warning; warnings are errors in this repository, so a warning would fail the publish.
-* It runs OpenIddict core on an application store, the server and the validation stack, not the degraded mode.
-* The flow tests in `tests/MagicLink.NET.AotProof.Tests` pass against the native binary: discovery, the key set, the authorization code flow with PKCE, the refresh token grant, the client credentials grant, and a protected endpoint that validates the access token. Refusals hold too: a wrong client secret, a wrong PKCE verifier, an unknown client, and a call without a valid token.
-* Not covered yet: the device authorization flow, because OpenIddict needs token storage for it and the proof stores no tokens; and the own PostgreSQL store. Both come with issue #2, and the CI job below grows to cover them.
-* Standing check: the `aot-proof` job in `.github/workflows/ci.yml` publishes the proof app as a native binary and runs the flow tests against it on every pull request, so an OpenIddict or SDK upgrade that breaks Native AOT turns CI red.
+* It runs OpenIddict core, the server and the validation stack, not the degraded mode. With `MAGICLINK_AOT_PROOF_POSTGRES` set it runs on the own PostgreSQL store, `MagicLink.NET.PostgreSql` (issue #2), with token and authorization storage; without it, on an in-memory application store.
+* The flow tests in `tests/MagicLink.NET.AotProof.Tests` pass against the native binary on PostgreSQL: discovery, the key set, the authorization code flow with PKCE, the refresh token grant, the client credentials grant, the device authorization flow, and a protected endpoint that validates the access token. Refusals hold too: a wrong client secret, a wrong PKCE verifier, an unknown client, an unknown user code, a device code redeemed twice, and a call without a valid token.
+* Standing check: the `aot-proof` job in `.github/workflows/ci.yml` publishes the proof app as a native binary, starts it on a PostgreSQL service and runs the flow tests against it on every pull request, so an OpenIddict or SDK upgrade that breaks Native AOT turns CI red.
 
 ## Open questions
 

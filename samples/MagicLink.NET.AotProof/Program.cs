@@ -13,11 +13,23 @@ var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.Services.ConfigureHttpJsonOptions(options => options.SerializerOptions.TypeInfoResolverChain.Insert(0, ProofJsonContext.Default));
 
+// With a PostgreSQL connection string the proof runs on the MagicLink.NET PostgreSQL store, which stores tokens and
+// authorizations and so allows the device flow. Without one it keeps its in-memory application store.
+var postgres = builder.Configuration[ProofClients.PostgresSetting];
+var onPostgres = !string.IsNullOrWhiteSpace(postgres);
+
 builder.Services.AddOpenIddict()
     .AddCore(options =>
     {
-        options.SetDefaultApplicationEntity<ProofApplication>();
-        options.ReplaceApplicationStore<ProofApplication, InMemoryApplicationStore>(ServiceLifetime.Singleton);
+        if (onPostgres)
+        {
+            options.UsePostgreSql(store => store.ConnectionString = postgres);
+        }
+        else
+        {
+            options.SetDefaultApplicationEntity<ProofApplication>();
+            options.ReplaceApplicationStore<ProofApplication, InMemoryApplicationStore>(ServiceLifetime.Singleton);
+        }
     })
     .AddServer(options =>
     {
@@ -31,23 +43,39 @@ builder.Services.AddOpenIddict()
 
         options.RegisterScopes(Scopes.OpenId, Scopes.OfflineAccess);
 
-        // Proof-only: keys live in memory, and nothing but the application store is persisted.
+        // Proof-only: keys live in memory.
         options.AddEphemeralEncryptionKey()
             .AddEphemeralSigningKey();
-        options.DisableTokenStorage();
-        options.DisableAuthorizationStorage();
         options.DisableScopeValidation();
 
-        options.UseAspNetCore()
+        var aspNetCore = options.UseAspNetCore()
             .EnableAuthorizationEndpointPassthrough()
             .EnableTokenEndpointPassthrough()
             .DisableTransportSecurityRequirement(); // Proof-only: CI calls the native binary over plain HTTP.
+
+        if (onPostgres)
+        {
+            // The device flow needs token storage, which only the PostgreSQL store has.
+            options.SetDeviceAuthorizationEndpointUris("connect/device")
+                .SetEndUserVerificationEndpointUris("connect/verify")
+                .AllowDeviceAuthorizationFlow();
+            aspNetCore.EnableEndUserVerificationEndpointPassthrough();
+        }
+        else
+        {
+            // Proof-only: the in-memory store persists nothing but applications.
+            options.DisableTokenStorage();
+            options.DisableAuthorizationStorage();
+        }
     })
     .AddValidation(options =>
     {
         options.UseLocalServer();
         options.UseAspNetCore();
     });
+
+// Registered after the store, so on PostgreSQL the migrations have run when the clients are registered.
+builder.Services.AddHostedService<ProofClientRegistration>();
 
 builder.Services.AddAuthentication(OpenIddictValidationAspNetCoreDefaults.AuthenticationScheme);
 builder.Services.AddAuthorization();
@@ -80,7 +108,7 @@ app.MapPost("/connect/token", async (HttpContext context) =>
         return Results.SignIn(new ClaimsPrincipal(identity), properties: null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    if (request.IsAuthorizationCodeGrantType() || request.IsRefreshTokenGrantType())
+    if (request.IsAuthorizationCodeGrantType() || request.IsRefreshTokenGrantType() || request.IsDeviceCodeGrantType())
     {
         var result = await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme).ConfigureAwait(false);
         return Results.SignIn(result.Principal!, properties: null, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
@@ -89,10 +117,23 @@ app.MapPost("/connect/token", async (HttpContext context) =>
     return Results.Forbid(authenticationSchemes: [OpenIddictServerAspNetCoreDefaults.AuthenticationScheme]);
 });
 
+// Proof-only: a user code presented here is approved at once for the fixed subject; the sign-in page is Phase 1.7.
+app.MapGet("/connect/verify", async (HttpContext context) =>
+{
+    var result = await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme).ConfigureAwait(false);
+    if (!result.Succeeded || string.IsNullOrEmpty(result.Principal.GetClaim(Claims.ClientId)))
+    {
+        return Results.Forbid(authenticationSchemes: [OpenIddictServerAspNetCoreDefaults.AuthenticationScheme]);
+    }
+
+    var identity = NewIdentity(ProofClients.TestSubject);
+    identity.SetScopes(result.Principal.GetScopes());
+    return Results.SignIn(new ClaimsPrincipal(identity), new AuthenticationProperties { RedirectUri = "/" }, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+});
+
 app.MapGet("/api/me", (ClaimsPrincipal user) => new MeResponse(user.GetClaim(Claims.Subject)))
     .RequireAuthorization();
 
-await RegisterClientsAsync(app.Services).ConfigureAwait(false);
 await app.RunAsync().ConfigureAwait(false);
 
 static ClaimsIdentity NewIdentity(string subject)
@@ -101,38 +142,6 @@ static ClaimsIdentity NewIdentity(string subject)
     identity.SetClaim(Claims.Subject, subject);
     identity.SetDestinations(static _ => [Destinations.AccessToken]);
     return identity;
-}
-
-static async Task RegisterClientsAsync(IServiceProvider services)
-{
-    var scope = services.CreateAsyncScope();
-    await using var _ = scope.ConfigureAwait(false);
-    var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
-
-    await manager.CreateAsync(new OpenIddictApplicationDescriptor
-    {
-        ClientId = ProofClients.ConfidentialClientId,
-        ClientSecret = ProofClients.ConfidentialClientSecret,
-        ClientType = ClientTypes.Confidential,
-        Permissions = { Permissions.Endpoints.Token, Permissions.GrantTypes.ClientCredentials },
-    }).ConfigureAwait(false);
-
-    await manager.CreateAsync(new OpenIddictApplicationDescriptor
-    {
-        ClientId = ProofClients.PublicClientId,
-        ClientType = ClientTypes.Public,
-        RedirectUris = { new Uri(ProofClients.PublicRedirectUri) },
-        Permissions =
-        {
-            Permissions.Endpoints.Authorization,
-            Permissions.Endpoints.Token,
-            Permissions.GrantTypes.AuthorizationCode,
-            Permissions.GrantTypes.RefreshToken,
-            Permissions.ResponseTypes.Code,
-            Permissions.Prefixes.Scope + Scopes.OfflineAccess,
-        },
-        Requirements = { Requirements.Features.ProofKeyForCodeExchange },
-    }).ConfigureAwait(false);
 }
 
 /// <summary>Exposes the entry point to <c>WebApplicationFactory</c> in the flow tests.</summary>

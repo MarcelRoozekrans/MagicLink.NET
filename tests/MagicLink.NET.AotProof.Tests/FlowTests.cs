@@ -7,13 +7,14 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace MagicLink.AotProof.Tests;
 
-public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
+/// <summary>The OpenIddict flows every store must serve. Each derived class runs them on one store.</summary>
+public abstract class FlowTests(ProofHost host)
 {
     private const string RedirectUri = "http://localhost/callback";
 
-    private HttpClient Client => host.Client;
+    protected HttpClient Client => host.Client;
 
-    private static CancellationToken Cancel => TestContext.Current.CancellationToken;
+    protected static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
     [Fact]
     public async Task Discovery_lists_the_endpoints_and_pkce()
@@ -171,13 +172,13 @@ public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
         ["redirect_uri"] = RedirectUri,
     });
 
-    private async Task<HttpResponseMessage> PostToken(Dictionary<string, string> form)
+    protected async Task<HttpResponseMessage> PostToken(IEnumerable<KeyValuePair<string, string>> form)
     {
         using var content = new FormUrlEncodedContent(form);
         return await Client.PostAsync("/connect/token", content, Cancel);
     }
 
-    private async Task<string?> CallApiMe(string accessToken)
+    protected async Task<string?> CallApiMe(string accessToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/me");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
@@ -194,14 +195,14 @@ public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
         return await ReadJson(response);
     }
 
-    private static async Task<string?> Error(HttpResponseMessage response)
+    protected static async Task<string?> Error(HttpResponseMessage response)
     {
         Assert.False(response.IsSuccessStatusCode);
         using var body = await ReadJson(response);
         return body.RootElement.GetProperty("error").GetString();
     }
 
-    private static async Task<JsonDocument> ReadJson(HttpResponseMessage response)
+    protected static async Task<JsonDocument> ReadJson(HttpResponseMessage response)
         => JsonDocument.Parse(await response.Content.ReadAsStringAsync(Cancel));
 
     private static List<string> Strings(JsonElement array) => array.EnumerateArray().Select(item => item.GetString() ?? string.Empty).ToList();
