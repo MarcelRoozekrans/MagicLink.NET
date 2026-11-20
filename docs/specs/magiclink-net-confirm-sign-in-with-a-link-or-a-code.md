@@ -29,6 +29,8 @@ A person confirms a sign-in by pressing a button on a page the email links to, o
 2. Typing the code where sign-in started signs the person in, also when the email was read on another device.
 3. Link and code belong to one sign-in request and stop working once either is used. A code is valid for 10 minutes and allows 5 attempts.
 4. An email address the source does not know gets no session and no email. The person sees the same message as for a known address ("if this address is known, you will receive an email"), so nobody can find out which addresses exist. MagicLink.NET logs the refusal for the operator.
+5. A sign-in request is bound to the browser that started it: confirming in that browser completes the sign-in there.
+6. When the link is confirmed on another device, MagicLink.NET first asks the person to confirm that the sign-in was theirs, and only then completes it.
 
 ## Open questions
 
