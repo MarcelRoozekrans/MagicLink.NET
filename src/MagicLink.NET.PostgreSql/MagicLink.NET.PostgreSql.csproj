@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>MagicLink.NET.PostgreSql</PackageId>
+    <Description>The PostgreSQL store for MagicLink.NET: keeps OpenIddict's applications, authorizations, scopes and tokens in PostgreSQL, without Entity Framework Core, and is Native AOT compatible.</Description>
+    <RootNamespace>MagicLink.PostgreSql</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" />
+    <PackageReference Include="Npgsql" />
+    <PackageReference Include="OpenIddict.Core" />
+    <PackageReference Include="ZeroAlloc.ORM" />
+    <PackageReference Include="ZeroAlloc.ORM.Generator" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- The migrations run from the assembly and ship as plain scripts for a DBA who applies them by hand. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Migrations/*.sql" />
+    <None Include="Migrations/*.sql" Pack="true" PackagePath="sql/" />
+  </ItemGroup>
+  <!-- This package has its own README, in place of the repository's. -->
+  <ItemGroup>
+    <None Remove="$(MSBuildThisFileDirectory)../../README.md" />
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="MagicLink.NET.PostgreSql.Tests" />
+  </ItemGroup>
+</Project>
