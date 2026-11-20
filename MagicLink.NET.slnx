@@ -2,7 +2,11 @@
   <Folder Name="/src/">
     <Project Path="src/MagicLink.NET/MagicLink.NET.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/MagicLink.NET.AotProof/MagicLink.NET.AotProof.csproj" />
+  </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/MagicLink.NET.AotProof.Tests/MagicLink.NET.AotProof.Tests.csproj" />
     <Project Path="tests/MagicLink.NET.Tests/MagicLink.NET.Tests.csproj" />
   </Folder>
 </Solution>
