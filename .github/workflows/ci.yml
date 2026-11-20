@@ -131,12 +131,30 @@ jobs:
           ls nupkg/*.nupkg
           [ "$(find nupkg -name '*.nupkg' | wc -l)" -gt 0 ]
 
-  # Proof that OpenIddict's server stack runs under Native AOT (issue #1, ADR-016). Publishes the proof
-  # app as a native binary, where warnings are errors so any trim or AOT warning fails the publish, then
-  # runs the same flow tests that build-test runs in-process against that binary.
+  # Proof that OpenIddict's server stack runs under Native AOT (issue #1, ADR-016) on the own PostgreSQL store
+  # (issue #2). Publishes the proof app as a native binary, where warnings are errors so any trim or AOT warning
+  # fails the publish, then runs the same flow tests that build-test runs in-process against that binary.
   aot-proof:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    # The native binary runs on the MagicLink.NET PostgreSQL store, which proves the store under Native AOT and
+    # gives the device flow the token storage it needs.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: magiclink
+          POSTGRES_PASSWORD: magiclink
+          POSTGRES_DB: magiclink
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U magiclink"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -156,6 +174,8 @@ jobs:
           if ls artifacts/aot/*.dll > /dev/null 2>&1; then echo "Managed assemblies were published next to the binary." >&2; exit 1; fi
 
       - name: Start the native binary
+        env:
+          MAGICLINK_AOT_PROOF_POSTGRES: "Host=localhost;Port=5432;Username=magiclink;Password=magiclink;Database=magiclink"
         run: |
           ASPNETCORE_URLS=http://127.0.0.1:5099 ./artifacts/aot/MagicLink.NET.AotProof > aot-proof.log 2>&1 &
           pid=$!
