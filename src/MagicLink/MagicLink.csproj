@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>MagicLink</PackageId>
+    <Description>Passwordless sign-in with magic links: single-use, expiring tokens with pluggable storage and email delivery.</Description>
+  </PropertyGroup>
+</Project>

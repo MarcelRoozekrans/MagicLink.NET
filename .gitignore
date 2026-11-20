@@ -1,0 +1,15 @@
+# Build artifacts
+bin/
+obj/
+*.user
+
+# Local tooling state (Claude Code session, superpowers plan workspaces)
+.claude/
+.superpowers/
+
+# Test results and coverage reports
+TestResults/
+
+# Local pack output
+artifacts/
+nupkg/

@@ -1,0 +1,20 @@
+root = true
+
+[*]
+end_of_line = lf
+charset = utf-8
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{yml,yaml,json,xml,props,targets,csproj,slnx}]
+indent_style = space
+indent_size = 2
+
+[*.cs]
+indent_style = space
+indent_size = 4
+
+# Suppress diagnostics for generated files — these are machine-generated and should not be analyzed
+[*.g.cs]
+dotnet_diagnostic.EPS06.severity = none
+dotnet_diagnostic.EPC12.severity = none
