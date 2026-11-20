@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "local>MarcelRoozekrans/renovate-config"
+  ],
+  "packageRules": [
+    {
+      "description": "Keep every NuGet version plain, such as 1.2.3, and move it to the new version. rangeStrategy pin writes an exact range [1.2.3] for NuGet, which the nuspec passes on to consumers as 'this version and no other' and which breaks their restore with NU1608.",
+      "matchManagers": ["nuget"],
+      "rangeStrategy": "bump"
+    }
+  ]
+}
