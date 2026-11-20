@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: magiclink
+          POSTGRES_PASSWORD: magiclink
+          POSTGRES_DB: magiclink
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U magiclink"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          MSSQL_SA_PASSWORD: "MagicLink!Passw0rd"
+        ports:
+          - 1433:1433
+
+    env:
+      MAGICLINK_TEST_POSTGRES: "Host=localhost;Port=5432;Username=magiclink;Password=magiclink;Database=magiclink"
+      MAGICLINK_TEST_SQLSERVER: "Server=localhost,1433;User Id=sa;Password=MagicLink!Passw0rd;TrustServerCertificate=True"
+      DOTNET_NOLOGO: "true"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Find solution
+        id: sln
+        run: |
+          sln=$(ls *.slnx *.sln 2>/dev/null | head -n 1 || true)
+          echo "path=$sln" >> "$GITHUB_OUTPUT"
+          if [ -z "$sln" ]; then echo "No solution yet; nothing to build."; fi
+
+      - name: Restore
+        if: steps.sln.outputs.path != ''
+        run: dotnet restore "${{ steps.sln.outputs.path }}"
+
+      - name: Build
+        if: steps.sln.outputs.path != ''
+        run: dotnet build "${{ steps.sln.outputs.path }}" --no-restore -c Release
+
+      - name: Test
+        if: steps.sln.outputs.path != ''
+        run: dotnet test "${{ steps.sln.outputs.path }}" --no-build -c Release
