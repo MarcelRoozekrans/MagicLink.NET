@@ -68,6 +68,7 @@ public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
 
         Assert.Equal(HttpStatusCode.OK, refreshed.StatusCode);
         using var body = await ReadJson(refreshed);
+        Assert.NotEqual(first.RootElement.GetProperty("access_token").GetString(), body.RootElement.GetProperty("access_token").GetString(), StringComparer.Ordinal);
         Assert.Equal(ProofClients.TestSubject, await CallApiMe(body.RootElement.GetProperty("access_token").GetString()!));
     }
 
@@ -106,6 +107,7 @@ public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Null(response.Headers.Location);
+        Assert.Contains("ID2052", await response.Content.ReadAsStringAsync(Cancel), StringComparison.Ordinal); // invalid client_id
     }
 
     [Theory]

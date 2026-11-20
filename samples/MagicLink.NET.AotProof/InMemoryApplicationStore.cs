@@ -25,6 +25,11 @@ public sealed class InMemoryApplicationStore : IOpenIddictApplicationStore<Proof
     public ValueTask CreateAsync(ProofApplication application, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(application);
+        if (application.ClientId is not null && _applications.Values.Any(other => string.Equals(other.ClientId, application.ClientId, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException("An application with this client id already exists.");
+        }
+
         if (!_applications.TryAdd(application.Id, application))
         {
             throw new InvalidOperationException("An application with this id already exists.");
@@ -49,10 +54,10 @@ public sealed class InMemoryApplicationStore : IOpenIddictApplicationStore<Proof
             : _applications.Values.FirstOrDefault(application => string.Equals(application.ClientId, identifier, StringComparison.Ordinal)));
 
     public IAsyncEnumerable<ProofApplication> FindByPostLogoutRedirectUriAsync(string uri, CancellationToken cancellationToken)
-        => Where(application => application.PostLogoutRedirectUris.Contains(uri, StringComparer.Ordinal));
+        => Where(application => application.PostLogoutRedirectUris.Contains(uri, StringComparer.Ordinal), cancellationToken);
 
     public IAsyncEnumerable<ProofApplication> FindByRedirectUriAsync(string uri, CancellationToken cancellationToken)
-        => Where(application => application.RedirectUris.Contains(uri, StringComparer.Ordinal));
+        => Where(application => application.RedirectUris.Contains(uri, StringComparer.Ordinal), cancellationToken);
 
     public ValueTask<string?> GetApplicationTypeAsync(ProofApplication application, CancellationToken cancellationToken) => Get(application, a => a.ApplicationType);
 
@@ -92,7 +97,7 @@ public sealed class InMemoryApplicationStore : IOpenIddictApplicationStore<Proof
     public IAsyncEnumerable<ProofApplication> ListAsync(int? count, int? offset, CancellationToken cancellationToken)
     {
         var applications = _applications.Values.OrderBy(application => application.Id, StringComparer.Ordinal).Skip(offset ?? 0);
-        return ToAsync(count is { } take ? applications.Take(take) : applications);
+        return ToAsync(count is { } take ? applications.Take(take) : applications, cancellationToken);
     }
 
     public IAsyncEnumerable<TResult> ListAsync<TState, TResult>(Func<IQueryable<ProofApplication>, TState, IQueryable<TResult>> query, TState state, CancellationToken cancellationToken)
@@ -146,8 +151,8 @@ public sealed class InMemoryApplicationStore : IOpenIddictApplicationStore<Proof
         return ValueTask.CompletedTask;
     }
 
-    private IAsyncEnumerable<ProofApplication> Where(Func<ProofApplication, bool> predicate)
-        => ToAsync(_applications.Values.Where(predicate).ToList());
+    private IAsyncEnumerable<ProofApplication> Where(Func<ProofApplication, bool> predicate, CancellationToken cancellationToken)
+        => ToAsync(_applications.Values.Where(predicate).ToList(), cancellationToken);
 
     private static async IAsyncEnumerable<ProofApplication> ToAsync(IEnumerable<ProofApplication> applications, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {

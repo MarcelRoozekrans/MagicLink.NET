@@ -64,11 +64,13 @@ public sealed class InMemoryApplicationStoreTests
     }
 
     [Fact]
-    public async Task Rejects_a_second_application_with_the_same_id_and_forgets_a_deleted_one()
+    public async Task Rejects_a_second_application_with_the_same_id_or_client_id_and_forgets_a_deleted_one()
     {
         var (store, application) = await StoreWithOneClient();
 
         await Assert.ThrowsAsync<InvalidOperationException>(async () => await store.CreateAsync(application, None));
+        var sameClientId = new ProofApplication { ClientId = "proof-cli" };
+        await Assert.ThrowsAsync<InvalidOperationException>(async () => await store.CreateAsync(sameClientId, None));
         await store.DeleteAsync(application, None);
         Assert.Null(await store.FindByClientIdAsync("proof-cli", None));
     }
