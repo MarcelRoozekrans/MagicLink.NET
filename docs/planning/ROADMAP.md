@@ -22,11 +22,11 @@ Design: `docs/superpowers/specs/2026-11-20-roadmap-design.md`. Source of truth: 
 **Plan:** `docs/superpowers/plans/2026-11-20-phase-1-1-scaffolding.md`
 **Completed:** 2026-11-20
 
-### Phase 1.2: Prove OpenIddict runs under Native AOT [status: pending]
+### Phase 1.2: Prove OpenIddict runs under Native AOT [status: active]
 **Goal:** Write down whether OpenIddict's server stack runs in an AOT-compiled ASP.NET Core app.
 **Surface:** Backend
 **HelpWanted:** no
-**Plan:** _to be written_
+**Plan:** `docs/superpowers/plans/2026-11-20-phase-1-2-aot-proof.md`
 **Issue:** #1
 
 ### Phase 1.3: Own OpenIddict store on PostgreSQL [status: pending]
