@@ -58,7 +58,7 @@ Every later phase merges through a pull request with the house checks green: bui
 
 - Unit: `MagicLinkOptions` defaults and `Validate()`, covering a lifetime of zero, a negative one, one over the maximum, and a valid one.
 - Pipeline:
-  - `dotnet build` and `dotnet test` pass locally on both target frameworks;
+  - `dotnet build` and `dotnet test` pass locally on net10.0;
   - `dotnet pack -p:Version=0.0.0-ci` passes, and a pack without a version fails with the guard's error;
   - the phase PR shows every required check green.
 

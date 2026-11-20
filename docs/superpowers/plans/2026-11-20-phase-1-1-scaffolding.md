@@ -6,14 +6,14 @@
 
 **Architecture:** `MagicLink.slnx` with `src/MagicLink` (core package) and `tests/MagicLink.Tests`. Shared MSBuild settings go in `Directory.Build.props` and `Directory.Packages.props`. GitHub Actions workflows are modelled on AI.Sentinel (library CI and release) and call MarcelRoozekrans/ci-baseline `@v1`.
 
-**Tech Stack:** .NET SDK 11.0.100 (net10.0, net11.0), xUnit v3 on Microsoft.Testing.Platform, Microsoft.Testing.Extensions.CodeCoverage, GitHub Actions, release-please v5, NuGet trusted publishing.
+**Tech Stack:** .NET SDK 10 (net10.0), xUnit v3 on Microsoft.Testing.Platform, Microsoft.Testing.Extensions.CodeCoverage, GitHub Actions, release-please v5, NuGet trusted publishing.
 
 **Spec:** `docs/superpowers/specs/2026-11-20-phase-1-1-scaffolding-design.md`
 
 ## Global Constraints
 
-- Target frameworks: `net10.0;net11.0` for every project.
-- `global.json`: SDK `11.0.100`, `rollForward: latestFeature`, test runner `Microsoft.Testing.Platform`.
+- Target framework: `net10.0` for every project.
+- `global.json`: SDK `10.0.100`, `rollForward: latestFeature`, test runner `Microsoft.Testing.Platform`.
 - Package versions only in `Directory.Packages.props`; no `Version` attribute on a `PackageReference` in a csproj.
 - `TreatWarningsAsErrors=true`; nullable and implicit usings enabled.
 - Test projects are named `<Package>.Tests` and live under `tests/`.
@@ -34,7 +34,7 @@
 ### Task 1: Solution skeleton and MagicLinkOptions
 
 **Files:**
-- Create: `global.json`, `Directory.Build.props`, `Directory.Packages.props`, `.editorconfig`, `.gitattributes`, `.gitignore`, `MagicLink.slnx`
+- Create: `global.json`, `Directory.Build.props`, `Directory.Packages.props`, `.editorconfig`, `.gitattributes`, `.gitignore`, `MagicLink.slnx`, `README.md` (stub)
 - Create: `src/MagicLink/MagicLink.csproj`, `src/MagicLink/MagicLinkOptions.cs`
 - Test: `tests/MagicLink.Tests/MagicLink.Tests.csproj`, `tests/MagicLink.Tests/MagicLinkOptionsTests.cs`
 
@@ -44,7 +44,7 @@
 - [ ] **Step 1: Write the build files.**
   - `global.json`: exact values from Global Constraints.
   - `Directory.Build.props`: copy the AI.Sentinel props with these changes:
-    - `TargetFrameworks` is `net10.0;net11.0`;
+    - `TargetFramework` is `net10.0`;
     - `RootNamespace` is `MagicLink`;
     - analyzer `PackageReference`s carry no versions;
     - packaging metadata: `Authors` Marcel Roozekrans, `PackageLicenseExpression` MIT, `PackageProjectUrl` and `RepositoryUrl` https://github.com/MarcelRoozekrans/MagicLink.NET, `PackageReadmeFile` README.md packed from the repo root, `PackageTags` `passwordless;magic-link;authentication;aspnetcore`;
@@ -52,6 +52,7 @@
     - add the version pack guard modelled on ZeroAlloc.ORM's, with codes renamed `MLVERSION001` and `MLVERSION002`.
   - `Directory.Packages.props` sets `ManagePackageVersionsCentrally=true` and holds the analyzer versions from AI.Sentinel, plus `xunit.v3` 4.0.3 and `Microsoft.Testing.Extensions.CodeCoverage`. The latest stable version of the code-coverage package is resolved with `dotnet package search`.
   - `.editorconfig`, `.gitattributes` and `.gitignore` come from AI.Sentinel, with Daedalus's `.gitattributes` contents.
+  - A stub `README.md` holding the package name, because the pack in Step 6 packs it. Task 4 fills it in.
 - [ ] **Step 2: Create the projects.**
   - `src/MagicLink/MagicLink.csproj`: `PackageId` MagicLink, with the description "Passwordless sign-in with magic links: single-use, expiring tokens with pluggable storage and email delivery."
   - `tests/MagicLink.Tests/MagicLink.Tests.csproj`: `OutputType` Exe, `IsPackable` false, `NoWarn` MA0004, references `xunit.v3`, the code-coverage package and the project `src/MagicLink`.
@@ -65,7 +66,7 @@
 - [ ] **Step 5: Implement `MagicLinkOptions`** per the Interfaces block. The class has XML docs on every public member.
 - [ ] **Step 6: Verify.**
   - `dotnet build -c Release` has 0 warnings.
-  - `dotnet test` passes on net10.0 and net11.0.
+  - `dotnet test` passes on net10.0.
   - `dotnet format whitespace . --folder --verify-no-changes` exits 0.
   - `dotnet pack src/MagicLink -c Release -p:Version=0.0.0-ci -o artifacts` writes `MagicLink.0.0.0-ci.nupkg`.
   - `dotnet pack src/MagicLink -c Release -o artifacts` fails with `MLVERSION001`.
@@ -100,7 +101,7 @@
 - [ ] **Step 3: Verify.**
   - Every workflow parses: `python3 -c "import yaml,sys;[yaml.safe_load(open(f)) for f in sys.argv[1:]]" .github/workflows/*.yml`.
   - If `actionlint` is available, run it.
-  - Run the Step 1 test command locally and check that `ls TestResults/**/*.cobertura.xml` lists at least 2 files, one per target framework.
+  - Run the Step 1 test command locally and check that `ls TestResults/**/*.cobertura.xml` lists at least 1 file for the net10.0 test app.
 - [ ] **Step 4: Commit** with `ci: add build, test, coverage, commitlint and baseline workflows`.
 
 ### Task 3: Release workflow and repository variables

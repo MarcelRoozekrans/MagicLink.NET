@@ -94,9 +94,12 @@ jobs:
       VERSION: ${{ needs.release-please.outputs.version || inputs.version }}
       TAG: ${{ needs.release-please.outputs.tag_name || format('v{0}', inputs.version) }}
     steps:
+      # Check out the release tag on both paths. release-please can create the release for a
+      # release PR merged before the commit that triggered this run, so the triggering commit is
+      # not always the released code.
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || '' }}
+          ref: ${{ env.TAG }}
 
       - uses: actions/setup-dotnet@v6
         with:
