@@ -10,6 +10,8 @@
         <ModulePath>.*\.Tests\.dll$</ModulePath>
         <ModulePath>.*Benchmarks.*\.dll$</ModulePath>
         <ModulePath>.*Samples?.*\.dll$</ModulePath>
+        <!-- The Native AOT proof app lives in samples/, but its tests load it from their own bin folder. -->
+        <ModulePath>.*AotProof\.dll$</ModulePath>
       </Exclude>
     </ModulePaths>
     <!-- Generated and compiler-generated code says nothing about test quality. -->
