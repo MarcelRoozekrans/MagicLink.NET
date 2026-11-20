@@ -4,7 +4,7 @@ Passwordless sign-in with magic links for ASP.NET Core.
 
 A user enters their email address and receives a link. Clicking the link signs them in. Tokens are random, stored only as hashes, expire, and work once.
 
-> **Status:** pre-release. The packages below are being built in milestone 1; nothing is on nuget.org yet.
+> **Status:** pre-1.0. The public API may still change between minor versions.
 
 ## Packages
 
@@ -28,4 +28,4 @@ The SDK version is pinned in `global.json`.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/MarcelRoozekrans/MagicLink.NET/blob/main/LICENSE).

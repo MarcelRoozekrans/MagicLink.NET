@@ -7,12 +7,23 @@
       MLVERSION002  the assembly being packed does not carry the package's version, which
                     happens when the build ran without -p:Version and pack ran with no-build.
 
-    The marker below is read before the SDK or any csproj assigns a default, so it is true
-    only when the version came from outside the project: -p:Version or -p:PackageVersion.
-    Build, test and publish never run the check; only pack does.
+    The marker below is true only when the version came from the command line, -p:Version or
+    -p:PackageVersion. MSBuild also turns environment variables into properties, so a stray
+    VERSION variable in a shell or CI job would otherwise count as a release version. The probe
+    tells them apart: a project can overwrite a property that came from the environment, but not
+    a global one from -p. If the probe value sticks, the version was not passed with -p, and the
+    original value is put back. Build, test and publish never run the check; only pack does.
   -->
   <PropertyGroup>
-    <MagicLinkVersionSupplied Condition="'$(Version)$(PackageVersion)' != ''">true</MagicLinkVersionSupplied>
+    <_MagicLinkOriginalVersion>$(Version)</_MagicLinkOriginalVersion>
+    <_MagicLinkOriginalPackageVersion>$(PackageVersion)</_MagicLinkOriginalPackageVersion>
+    <Version>__magiclink_probe__</Version>
+    <PackageVersion>__magiclink_probe__</PackageVersion>
+  </PropertyGroup>
+  <PropertyGroup>
+    <MagicLinkVersionSupplied Condition="'$(Version)' != '__magiclink_probe__' or '$(PackageVersion)' != '__magiclink_probe__'">true</MagicLinkVersionSupplied>
+    <Version Condition="'$(Version)' == '__magiclink_probe__'">$(_MagicLinkOriginalVersion)</Version>
+    <PackageVersion Condition="'$(PackageVersion)' == '__magiclink_probe__'">$(_MagicLinkOriginalPackageVersion)</PackageVersion>
   </PropertyGroup>
 
   <!-- BeforeTargets GenerateNuspec: after pack's build step, if any, before the nupkg is written. -->
@@ -60,8 +71,6 @@
     <NuGetAuditMode>all</NuGetAuditMode>
     <NuGetAuditLevel>moderate</NuGetAuditLevel>
     <RootNamespace>MagicLink</RootNamespace>
-    <!-- EPS06/EPC12 fire exclusively in source-generator output (*.g.cs); suppress globally -->
-    <NoWarn>$(NoWarn);EPS06;EPC12</NoWarn>
   </PropertyGroup>
 
   <!-- Shared NuGet packaging metadata. Each package's csproj sets PackageId and Description. -->

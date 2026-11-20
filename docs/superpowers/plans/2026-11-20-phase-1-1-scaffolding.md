@@ -18,7 +18,7 @@
 - `TreatWarningsAsErrors=true`; nullable and implicit usings enabled.
 - Test projects are named `<Package>.Tests` and live under `tests/`.
 - Every text file uses LF line endings.
-- The required check names, exactly: `build-test`, `commitlint`, `baseline / gitleaks`, `baseline / codeql (csharp)`, `baseline / nuget-audit`, `codecov/project`.
+- The required check names, exactly: `build-test`, `pack`, `commitlint`, `baseline / gitleaks`, `baseline / codeql (csharp)`, `baseline / nuget-audit`, `codecov/project`.
 - Commit messages are conventional, with no nested parentheses in bodies.
 
 ## Review Focus

@@ -12,9 +12,11 @@ on:
         type: string
         required: true
 
+# The release-please job acts through the release bot App token, so GITHUB_TOKEN only reads:
+# the dropped-commit check lists open pull requests. The publish job sets its own permissions.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  pull-requests: read
 
 jobs:
   release-please:
@@ -60,25 +62,24 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          # Before the first release there is no tag, so the whole history is the unreleased range.
           last_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$last_tag" ]; then
-            echo "No tag yet; nothing to verify."
-            exit 0
-          fi
+          range=${last_tag:+$last_tag..}HEAD
+          since=${last_tag:-the start of history}
 
-          releasable=$(git log "$last_tag"..HEAD --format=%s | grep -cE '^(feat|fix)(\(.+\))?!?:' || true)
+          releasable=$(git log "$range" --format=%s | grep -cE '^(feat|fix)(\(.+\))?!?:' || true)
           if [ "$releasable" -eq 0 ]; then
-            echo "No releasable commits since $last_tag."
+            echo "No releasable commits since $since."
             exit 0
           fi
 
           if gh pr list --state open --json title --jq '.[].title' | grep -qE '^chore\(main\): release'; then
-            echo "$releasable releasable commit(s) since $last_tag, and a release PR is open."
+            echo "$releasable releasable commit(s) since $since, and a release PR is open."
             exit 0
           fi
 
-          echo "::error::$releasable releasable commit(s) exist since $last_tag but release-please produced no release PR. A commit it could not parse is dropped from the changelog while this job still succeeds. Check the Release Please step log for 'commit could not be parsed'."
-          git log "$last_tag"..HEAD --format='  %h %s' | grep -E '(feat|fix)' || true
+          echo "::error::$releasable releasable commit(s) exist since $since but release-please produced no release PR. A commit it could not parse is dropped from the changelog while this job still succeeds. Check the Release Please step log for 'commit could not be parsed'."
+          git log "$range" --format='  %h %s' | grep -E '(feat|fix)' || true
           exit 1
 
   publish:

@@ -38,7 +38,7 @@ Every later phase merges through a pull request with the house checks green: bui
 
 **Repo hygiene.** `codecov.yml` is the exact ci-baseline block. The repo also gets `renovate.json`, `.github/pull_request_template.md`, a README stub with the goal and the package list, and `AGENTS.md` with the build and test commands, the commit rules and the no-nested-parentheses rule for commit bodies.
 
-**Repository settings, done by Claude.** Set the repository variables `RELEASE_BOT_CLIENT_ID` and `NUGET_USER`, copying the values from AI.Sentinel. Once CI has reported on the phase PR, add the required status checks to the `Main` ruleset: `build-test`, `commitlint`, `baseline / gitleaks`, `baseline / codeql (csharp)`, `baseline / nuget-audit` and `codecov/project`.
+**Repository settings, done by Claude.** Set the repository variables `RELEASE_BOT_CLIENT_ID` and `NUGET_USER`, copying the values from AI.Sentinel. Once CI has reported on the phase PR, add the required status checks to the `Main` ruleset: `build-test`, `pack`, `commitlint`, `baseline / gitleaks`, `baseline / codeql (csharp)`, `baseline / nuget-audit` and `codecov/project`.
 
 **Done by the operator, outside this phase's merge.** These steps need Marcel and block only the first publish, not CI:
 - Set the `RELEASE_BOT_PRIVATE_KEY` secret.
