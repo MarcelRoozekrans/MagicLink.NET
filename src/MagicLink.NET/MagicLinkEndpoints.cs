@@ -95,7 +95,8 @@ internal static class MagicLinkEndpoints
             return true;
         }
 
-        return request.MaxAge is { } maxAge && time.GetUtcNow() - signedInAt > TimeSpan.FromSeconds(maxAge);
+        // In seconds, as max_age is: a long can exceed what TimeSpan.FromSeconds takes.
+        return request.MaxAge is { } maxAge && (time.GetUtcNow() - signedInAt).TotalSeconds > maxAge;
     }
 
     /// <summary>

@@ -209,13 +209,16 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         Assert.Equal("consent", QueryHelpers.ParseQuery(new Uri(SignInHosts.MagicLink, returnUrl).Query)["prompt"].ToString());
     }
 
-    [Fact]
-    public async Task A_recent_session_meets_max_age()
+    [Theory]
+    [InlineData("3600")]
+    [InlineData("922337203686")] // Beyond what TimeSpan.FromSeconds takes.
+    [InlineData("9223372036854775807")]
+    public async Task A_recent_session_meets_max_age(string maxAge)
     {
         var browser = hosts.NewBrowser();
         (await browser.NavigateAsync(AppMe)).Dispose();
         var visits = hosts.SignInPageVisits;
-        var (authorize, _, _) = NewAuthorization(extra: "&max_age=3600");
+        var (authorize, _, _) = NewAuthorization(extra: "&max_age=" + maxAge);
 
         await CodeFrom(await browser.NavigateAsync(authorize, stopAtHost: SignInHosts.App.Host));
 
