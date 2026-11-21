@@ -19,6 +19,9 @@ public sealed class PruningAcrossHostsTests(PostgresDatabase database) : IClassF
     /// <summary>Every run of the job, by job id, from both hosts.</summary>
     private readonly ConcurrentQueue<Guid> _runs = new();
 
+    /// <summary>Holds both hosts' polls at the claim, so they compete for the same due run.</summary>
+    private readonly ClaimGate _gate = new(hosts: 2);
+
     private IHost BuildHost()
     {
         var builder = Host.CreateEmptyApplicationBuilder(settings: null);
@@ -28,6 +31,11 @@ public sealed class PruningAcrossHostsTests(PostgresDatabase database) : IClassF
         // The generated executor, wrapped so each run is recorded.
         builder.Services.RemoveAll<IJobTypeExecutor>();
         builder.Services.AddSingleton<IJobTypeExecutor>(new RecordingExecutor(new PruneExpiredDataJobTypeExecutor(), _runs));
+
+        // The store's job store, wrapped so each poll passes the gate before it claims.
+        var store = builder.Services.Single(static d => d.ServiceType == typeof(IJobStore));
+        builder.Services.Remove(store);
+        builder.Services.AddScoped<IJobStore>(provider => new GatedJobStore((IJobStore)store.ImplementationFactory!(provider), _gate));
         return builder.Build();
     }
 
@@ -45,8 +53,11 @@ public sealed class PruningAcrossHostsTests(PostgresDatabase database) : IClassF
             Assert.Equal(1, await database.ScalarAsync<long>("SELECT count(*) FROM magiclink.schedulingjobs"));
             var seeded = await database.ScalarAsync<Guid>("SELECT id FROM magiclink.schedulingjobs");
 
-            // The seeded run is due at the next full hour; make it due now.
+            // Both hosts wait at the claim while the seeded run, due at the next full hour, is made due now; then
+            // both claim at once.
+            await _gate.ArmAsync(TimeSpan.FromSeconds(10), Cancel);
             await database.ScalarAsync<int>("UPDATE magiclink.schedulingjobs SET scheduledat = now() - interval '1 minute'");
+            _gate.Release();
 
             // The run is marked Succeeded before its successor is inserted, so wait for both.
             var deadline = DateTime.UtcNow.AddSeconds(30);
@@ -67,6 +78,82 @@ public sealed class PruningAcrossHostsTests(PostgresDatabase database) : IClassF
         {
             await Task.WhenAll(first.StopAsync(Cancel), second.StopAsync(Cancel));
         }
+    }
+
+    /// <summary>
+    /// Once armed, holds each host's next poll before it claims, until every host is waiting and the test releases them
+    /// together. Unarmed, polls pass straight through.
+    /// </summary>
+    private sealed class ClaimGate(int hosts)
+    {
+        private readonly Lock _lock = new();
+        private TaskCompletionSource? _allWaiting;
+        private TaskCompletionSource? _released;
+        private int _waiting;
+
+        /// <summary>Arms the gate and returns once every host is waiting at it.</summary>
+        public async Task ArmAsync(TimeSpan timeout, CancellationToken ct)
+        {
+            Task allWaiting;
+            lock (_lock)
+            {
+                _waiting = 0;
+                _allWaiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                _released = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                allWaiting = _allWaiting.Task;
+            }
+
+            await allWaiting.WaitAsync(timeout, ct);
+        }
+
+        /// <summary>Lets the waiting polls claim, all at once, and disarms the gate.</summary>
+        public void Release()
+        {
+            TaskCompletionSource? released;
+            lock (_lock)
+            {
+                released = _released;
+                _released = null;
+                _allWaiting = null;
+            }
+
+            released?.TrySetResult();
+        }
+
+        public Task WaitAsync()
+        {
+            lock (_lock)
+            {
+                if (_released is null || _waiting >= hosts) return Task.CompletedTask;
+
+                if (++_waiting == hosts) _allWaiting!.TrySetResult();
+                return _released.Task;
+            }
+        }
+    }
+
+    /// <summary>Passes the gate, then claims through the store's own job store.</summary>
+    private sealed class GatedJobStore(IJobStore inner, ClaimGate gate) : IJobStore
+    {
+        public async ValueTask<IReadOnlyList<JobEntry>> FetchPendingAsync(int batchSize, CancellationToken ct)
+        {
+            await gate.WaitAsync().WaitAsync(ct);
+            return await inner.FetchPendingAsync(batchSize, ct);
+        }
+
+        public ValueTask EnqueueAsync(string typeName, byte[] payload, DateTimeOffset scheduledAt, int maxAttempts, string? cronExpression, CancellationToken ct) =>
+            inner.EnqueueAsync(typeName, payload, scheduledAt, maxAttempts, cronExpression, ct);
+
+        public ValueTask MarkSucceededAsync(JobId id, DateTimeOffset? nextRunAt, string? cronExpression, int maxAttempts, CancellationToken ct) =>
+            inner.MarkSucceededAsync(id, nextRunAt, cronExpression, maxAttempts, ct);
+
+        public ValueTask MarkFailedAsync(JobId id, int attempts, DateTimeOffset nextRetryAt, CancellationToken ct) =>
+            inner.MarkFailedAsync(id, attempts, nextRetryAt, ct);
+
+        public ValueTask DeadLetterAsync(JobId id, string error, CancellationToken ct) => inner.DeadLetterAsync(id, error, ct);
+
+        public ValueTask UpsertRecurringAsync(string typeName, byte[] payload, DateTimeOffset scheduledAt, string? cronExpression, int maxAttempts, CancellationToken ct) =>
+            inner.UpsertRecurringAsync(typeName, payload, scheduledAt, cronExpression, maxAttempts, ct);
     }
 
     /// <summary>Records the job id of each run, then runs the job.</summary>
