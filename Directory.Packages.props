@@ -26,8 +26,8 @@
     <PackageVersion Include="Npgsql" Version="10.0.4" />
     <PackageVersion Include="ZeroAlloc.ORM" Version="2.16.1" />
     <PackageVersion Include="ZeroAlloc.ORM.Generator" Version="2.16.1" />
-    <PackageVersion Include="ZeroAlloc.Scheduling" Version="2.4.2" />
-    <PackageVersion Include="ZeroAlloc.Scheduling.Orm" Version="2.4.2" />
+    <PackageVersion Include="ZeroAlloc.Scheduling" Version="2.5.0" />
+    <PackageVersion Include="ZeroAlloc.Scheduling.Orm" Version="2.5.0" />
   </ItemGroup>
 
   <!-- Tests -->

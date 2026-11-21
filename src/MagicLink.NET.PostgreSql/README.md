@@ -31,6 +31,8 @@ With `PruneExpiredData` on, the default, a job runs once an hour and deletes tok
 * When the host does not use ZeroAlloc.Scheduling, `UsePostgreSql` calls `AddScheduling` and keeps the jobs in the store's database.
 * When the host does, it must call `AddScheduling` before `UsePostgreSql`. The store then only adds its job, which runs on the host's job store, and does not create the job table. With a job store that several instances do not share, such as the in-memory one, every instance runs the job.
 
+A run that a stopped or crashed host left unfinished is run again once its claim is older than ZeroAlloc.Scheduling's `SchedulingOptions.ClaimTimeout`, 15 minutes by default. A run that takes longer than that runs a second time while the first still runs, which pruning allows: both delete the same expired rows. Set the timeout with `services.Configure<SchedulingOptions>(o => o.ClaimTimeout = ...)`, or in the host's own `AddScheduling` callback. A run that fails on every attempt is dead-lettered, and the next hour's run is still scheduled.
+
 Set `PruneExpiredData = false` to prune some other way.
 
 ## Behaviour
