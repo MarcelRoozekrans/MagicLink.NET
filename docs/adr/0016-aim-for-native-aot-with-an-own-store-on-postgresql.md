@@ -31,4 +31,7 @@ Options considered:
 
 Both proofs this decision waited on have succeeded. OpenIddict 7.9.0's server stack runs under Native AOT (issue #1). The own store, `MagicLink.NET.PostgreSql`, runs under it too, and so does the device flow on that store (issue #2). The `aot-proof` CI job publishes the proof app as a native binary, starts it on PostgreSQL and runs the flow tests against it.
 
-Native AOT is therefore a requirement from now on. `aot-proof` is a required check on `main`, so a change that breaks Native AOT cannot be merged.
+Native AOT is therefore a requirement from now on. Two checks enforce it:
+
+* Every package under `src/` builds with `IsAotCompatible`, so a trim or AOT warning fails the build.
+* `aot-proof` is a required check on `main`. It runs what the proof app publishes: OpenIddict and `MagicLink.NET.PostgreSql`. The core package `MagicLink.NET` is not in that binary yet; the proof app moves onto it when the core gets its hosting API (issue #11), and from then on the job covers the core too.
