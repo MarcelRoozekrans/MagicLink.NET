@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/MarcelRoozekrans/MagicLink.NET/compare/v0.1.0...v0.1.1) (2026-11-21)
+
+
+### Features
+
+* **postgresql:** prune expired tokens and authorizations every hour ([72f85db](https://github.com/MarcelRoozekrans/MagicLink.NET/commit/72f85dbe200ac39161d9c6d5c1db3451c5ad4ead))
+
 ## 0.1.0 (2026-11-20)
 
 
