@@ -1,4 +1,6 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using ZeroAlloc.Scheduling;
 
@@ -14,11 +16,18 @@ public sealed class PruningAcrossHostsTests(PostgresDatabase database) : IClassF
 
     private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
+    /// <summary>Every run of the job, by job id, from both hosts.</summary>
+    private readonly ConcurrentQueue<Guid> _runs = new();
+
     private IHost BuildHost()
     {
         var builder = Host.CreateEmptyApplicationBuilder(settings: null);
         builder.Services.AddOpenIddict().AddCore(options => options.UsePostgreSql(store => store.ConnectionString = database.ConnectionString));
         builder.Services.Configure<SchedulingOptions>(static options => options.PollingInterval = TimeSpan.FromMilliseconds(100));
+
+        // The generated executor, wrapped so each run is recorded.
+        builder.Services.RemoveAll<IJobTypeExecutor>();
+        builder.Services.AddSingleton<IJobTypeExecutor>(new RecordingExecutor(new PruneExpiredDataJobTypeExecutor(), _runs));
         return builder.Build();
     }
 
@@ -34,19 +43,22 @@ public sealed class PruningAcrossHostsTests(PostgresDatabase database) : IClassF
         try
         {
             Assert.Equal(1, await database.ScalarAsync<long>("SELECT count(*) FROM magiclink.schedulingjobs"));
+            var seeded = await database.ScalarAsync<Guid>("SELECT id FROM magiclink.schedulingjobs");
 
             // The seeded run is due at the next full hour; make it due now.
             await database.ScalarAsync<int>("UPDATE magiclink.schedulingjobs SET scheduledat = now() - interval '1 minute'");
 
+            // The run is marked Succeeded before its successor is inserted, so wait for both.
             var deadline = DateTime.UtcNow.AddSeconds(30);
-            while (await CountAsync((int)JobStatus.Succeeded) == 0 && DateTime.UtcNow < deadline)
+            while ((await CountAsync((int)JobStatus.Succeeded) != 1 || await CountAsync((int)JobStatus.Pending) != 1) && DateTime.UtcNow < deadline)
             {
                 await Task.Delay(100, Cancel);
             }
 
-            // Both workers keep polling for a while, so a second run of the same due time would show up here.
+            // Both workers have polled several more times by now, so a second run of the same due time would show here.
             await Task.Delay(TimeSpan.FromSeconds(1), Cancel);
 
+            Assert.Equal([seeded], _runs);
             Assert.Equal(1, await CountAsync((int)JobStatus.Succeeded));
             Assert.Equal(1, await CountAsync((int)JobStatus.Pending));
             Assert.Equal(2, await database.ScalarAsync<long>("SELECT count(*) FROM magiclink.schedulingjobs"));
@@ -54,6 +66,20 @@ public sealed class PruningAcrossHostsTests(PostgresDatabase database) : IClassF
         finally
         {
             await Task.WhenAll(first.StopAsync(Cancel), second.StopAsync(Cancel));
+        }
+    }
+
+    /// <summary>Records the job id of each run, then runs the job.</summary>
+    private sealed class RecordingExecutor(IJobTypeExecutor inner, ConcurrentQueue<Guid> runs) : IJobTypeExecutor
+    {
+        public string TypeName => inner.TypeName;
+
+        public int MaxAttempts => inner.MaxAttempts;
+
+        public ValueTask ExecuteAsync(byte[] payload, JobContext ctx, CancellationToken ct)
+        {
+            runs.Enqueue(ctx.JobId.Value);
+            return inner.ExecuteAsync(payload, ctx, ct);
         }
     }
 }

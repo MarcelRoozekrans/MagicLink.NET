@@ -35,7 +35,7 @@ public sealed class PruningJobTests(PostgresDatabase database) : IClassFixture<P
     }
 
     [Fact]
-    public async Task A_run_prunes_what_expired_more_than_14_days_ago_and_keeps_the_rest()
+    public async Task A_run_prunes_what_is_no_longer_valid_and_older_than_14_days_and_keeps_the_rest()
     {
         using var host = BuildHost();
         await host.StartAsync(Cancel);
@@ -45,17 +45,34 @@ public sealed class PruningJobTests(PostgresDatabase database) : IClassFixture<P
         var now = DateTimeOffset.UtcNow;
         var subject = "pruned-" + Guid.NewGuid().ToString("N");
 
+        // Both sides of each rule: old and no longer valid goes; recent, or still valid, stays.
         await tokens.CreateAsync(Token(subject, created: now.AddDays(-30), expires: now.AddDays(-29)), Cancel);
-        await tokens.CreateAsync(Token(subject, created: now, expires: now.AddHours(1)), Cancel);
+        var recentExpired = await tokens.GetIdAsync(await tokens.CreateAsync(Token(subject, created: now.AddDays(-1), expires: now.AddHours(-1)), Cancel), Cancel);
+        var oldValid = await tokens.GetIdAsync(await tokens.CreateAsync(Token(subject, created: now.AddDays(-30), expires: now.AddDays(1)), Cancel), Cancel);
         await authorizations.CreateAsync(Authorization(subject, OpenIddictConstants.Statuses.Revoked, created: now.AddDays(-30)), Cancel);
-        await authorizations.CreateAsync(Authorization(subject, OpenIddictConstants.Statuses.Valid, created: now), Cancel);
+        var recentRevoked = await authorizations.GetIdAsync(
+            await authorizations.CreateAsync(Authorization(subject, OpenIddictConstants.Statuses.Revoked, created: now.AddDays(-1)), Cancel), Cancel);
+        var oldPermanent = await authorizations.GetIdAsync(
+            await authorizations.CreateAsync(Authorization(subject, OpenIddictConstants.Statuses.Valid, created: now.AddDays(-30)), Cancel), Cancel);
 
         var executor = scope.ServiceProvider.GetServices<IJobTypeExecutor>()
             .Single(static executor => string.Equals(executor.TypeName, "MagicLink.PostgreSql.PruneExpiredDataJob", StringComparison.Ordinal));
         await executor.ExecuteAsync([], new JobContext { JobId = JobId.New(), Attempt = 1, ScheduledAt = now, Services = scope.ServiceProvider }, Cancel);
 
-        Assert.Single(await ToListAsync(tokens.FindBySubjectAsync(subject, Cancel)));
-        Assert.Single(await ToListAsync(authorizations.FindBySubjectAsync(subject, Cancel)));
+        var keptTokens = new List<string?>();
+        await foreach (var token in tokens.FindBySubjectAsync(subject, Cancel))
+        {
+            keptTokens.Add(await tokens.GetIdAsync(token, Cancel));
+        }
+
+        var keptAuthorizations = new List<string?>();
+        await foreach (var authorization in authorizations.FindBySubjectAsync(subject, Cancel))
+        {
+            keptAuthorizations.Add(await authorizations.GetIdAsync(authorization, Cancel));
+        }
+
+        Assert.Equal(new[] { recentExpired, oldValid }.Order(StringComparer.Ordinal), keptTokens.Order(StringComparer.Ordinal));
+        Assert.Equal(new[] { recentRevoked, oldPermanent }.Order(StringComparer.Ordinal), keptAuthorizations.Order(StringComparer.Ordinal));
         await host.StopAsync(Cancel);
     }
 
@@ -75,15 +92,4 @@ public sealed class PruningJobTests(PostgresDatabase database) : IClassFixture<P
         Type = OpenIddictConstants.AuthorizationTypes.Permanent,
         CreationDate = created,
     };
-
-    private static async Task<List<T>> ToListAsync<T>(IAsyncEnumerable<T> source)
-    {
-        var list = new List<T>();
-        await foreach (var item in source)
-        {
-            list.Add(item);
-        }
-
-        return list;
-    }
 }
