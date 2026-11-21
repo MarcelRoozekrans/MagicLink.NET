@@ -264,7 +264,8 @@ internal static partial class SignInPage
         return new Uri(issuer.AbsoluteUri.TrimEnd('/') + LinkPath + "?" + TokenField + "=" + Uri.EscapeDataString(linkToken));
     }
 
-    private static bool IsEmailAddress(string typed) =>
+    /// <summary>Whether <paramref name="typed"/> is a single email address, as SMTP can deliver to, with nothing around it.</summary>
+    internal static bool IsEmailAddress(string typed) =>
         typed.Length is > 0 and <= MaxEmailLength
         && MailAddress.TryCreate(typed, out var address)
         && string.Equals(address.Address, typed, StringComparison.Ordinal);

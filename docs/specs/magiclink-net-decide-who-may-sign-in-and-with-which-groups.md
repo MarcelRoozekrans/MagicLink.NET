@@ -34,7 +34,7 @@ MagicLink.NET looks up whether an email address may sign in and which groups the
 
 ## Open questions
 
-None yet.
+* *Should MagicLink.NET fetch the file from a git repository itself?* The first version reads the file from a path: a checkout of the repository, or a file mounted from it, such as a Kubernetes ConfigMap that a GitOps tool keeps up to date. It reads the file again when it changes, so a new commit applies without a restart. Cloning and pulling a repository would need credentials for it and a git client in the process. Written down while building issue #7.
 
 ## Tasks
 

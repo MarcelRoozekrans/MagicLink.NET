@@ -1,6 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
+using OpenIddict.Abstractions;
 using OpenIddict.Server;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
@@ -33,25 +34,13 @@ internal static class MagicLinkServer
                 .RequireProofKeyForCodeExchange();
 
             options.RegisterScopes(Scopes.OpenId, Scopes.Email);
-            options.RegisterClaims(Claims.Subject, Claims.Email, Claims.EmailVerified, Claims.AuthenticationTime);
+            options.RegisterClaims(Claims.Subject, Claims.Email, Claims.EmailVerified, Claims.AuthenticationTime, MagicLinkIdentity.GroupsClaim);
 
             // Applications and their APIs check access tokens as plain signed JWTs against the published keys, as with
             // any other identity provider, so access tokens are signed but not encrypted.
             options.DisableAccessTokenEncryption();
 
-            // OpenIddict answers user info itself, but returns no email_verified; this adds it next to the email.
-            options.AddEventHandler<OpenIddictServerEvents.HandleUserInfoRequestContext>(handler => handler
-                .UseInlineHandler(static context =>
-                {
-                    if (context.Email is not null)
-                    {
-                        context.Claims[Claims.EmailVerified] = true;
-                    }
-
-                    return default;
-                })
-                .SetOrder(OpenIddictServerHandlers.UserInfo.AttachClaims.Descriptor.Order + 1_000)
-                .SetType(OpenIddictServerHandlerType.Custom));
+            AddUserInfoClaims(options);
 
             options.UseAspNetCore()
                 .EnableAuthorizationEndpointPassthrough()
@@ -71,6 +60,9 @@ internal static class MagicLinkServer
         builder.Services.AddOptions<MagicLinkOptions>()
             .Validate(static options => options.CodeLifetime > TimeSpan.Zero, "MagicLinkOptions.CodeLifetime must be positive.")
             .Validate(static options => options.MaxCodeAttempts > 0, "MagicLinkOptions.MaxCodeAttempts must be at least 1.")
+            .Validate<IServiceProviderIsService>(
+                static (_, services) => services.IsService(typeof(ISignInSource)),
+                "MagicLink.NET needs a source of who may sign in, for example a file with AddMagicLinkSignInFile: without one it cannot tell who may sign in.")
             .ValidateOnStart();
 
         // The sign-in page: its forms carry antiforgery tokens, and its email goes out in the background (issue #6).
@@ -79,6 +71,32 @@ internal static class MagicLinkServer
         AddSignInMail(builder.Services);
 
         return builder;
+    }
+
+    /// <summary>
+    /// OpenIddict answers user info itself, but returns no email_verified and no groups; this adds the first next to the
+    /// email, and the groups the access token carries.
+    /// </summary>
+    private static void AddUserInfoClaims(OpenIddictServerBuilder options)
+    {
+        options.AddEventHandler<OpenIddictServerEvents.HandleUserInfoRequestContext>(handler => handler
+            .UseInlineHandler(static context =>
+            {
+                if (context.Email is not null)
+                {
+                    context.Claims[Claims.EmailVerified] = true;
+                }
+
+                var groups = context.AccessTokenPrincipal?.GetClaims(MagicLinkIdentity.GroupsClaim) ?? [];
+                if (!groups.IsEmpty)
+                {
+                    context.Claims[MagicLinkIdentity.GroupsClaim] = new OpenIddictParameter(groups!);
+                }
+
+                return default;
+            })
+            .SetOrder(OpenIddictServerHandlers.UserInfo.AttachClaims.Descriptor.Order + 1_000)
+            .SetType(OpenIddictServerHandlerType.Custom));
     }
 
     /// <summary>

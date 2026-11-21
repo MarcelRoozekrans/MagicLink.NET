@@ -8,6 +8,7 @@
     <PackageReference Include="OpenIddict.Core" />
     <PackageReference Include="OpenIddict.Server.AspNetCore" />
     <PackageReference Include="ZeroAlloc.Resilience" />
+    <PackageReference Include="ZeroAlloc.Results" />
   </ItemGroup>
   <!-- The hosting API is internal until issue #11 makes it public; the tests host it meanwhile. -->
   <ItemGroup>

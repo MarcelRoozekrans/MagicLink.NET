@@ -25,6 +25,11 @@
     <PackageVersion Include="ZeroAlloc.Resilience" Version="3.5.1" />
   </ItemGroup>
 
+  <!-- Expected failures as values (product-line standards) -->
+  <ItemGroup>
+    <PackageVersion Include="ZeroAlloc.Results" Version="1.5.1" />
+  </ItemGroup>
+
   <!-- PostgreSQL store (ADR-016) -->
   <ItemGroup>
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.15" />

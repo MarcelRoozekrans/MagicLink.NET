@@ -4,6 +4,8 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.WebUtilities;
 
+using static MagicLink.Tests.SignIn.Oidc;
+
 namespace MagicLink.Tests.SignIn;
 
 // docs/specs/magiclink-net-run-an-oidc-provider-for-applications-and-clis.md, criterion 1: an application that speaks
@@ -279,70 +281,4 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         Assert.Contains("email", Strings(root.GetProperty("scopes_supported")), StringComparer.Ordinal);
         Assert.Equal(["authorization_code"], Strings(root.GetProperty("grant_types_supported")));
     }
-
-    private static (Uri Authorize, string Verifier, string Challenge) NewAuthorization(string scope = "openid email", string extra = "")
-    {
-        var verifier = Base64Url(RandomNumberGenerator.GetBytes(32));
-        var challenge = Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
-        var query = QueryHelpers.AddQueryString("/connect/authorize", new Dictionary<string, string?>(StringComparer.Ordinal)
-        {
-            ["client_id"] = SignInHosts.ClientId,
-            ["redirect_uri"] = SignInHosts.AppCallback.ToString(),
-            ["response_type"] = "code",
-            ["scope"] = scope,
-            ["state"] = Guid.NewGuid().ToString("N"),
-            ["nonce"] = Guid.NewGuid().ToString("N"),
-            ["code_challenge"] = challenge,
-            ["code_challenge_method"] = "S256",
-        });
-        return (new Uri(SignInHosts.MagicLink, query + extra), verifier, query);
-    }
-
-    private static Task<string> CodeFrom(HttpResponseMessage response)
-    {
-        using (response)
-        {
-            Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-            var callback = response.Headers.Location!;
-            Assert.Equal(SignInHosts.AppCallback.GetLeftPart(UriPartial.Path), callback.GetLeftPart(UriPartial.Path));
-            var code = QueryHelpers.ParseQuery(callback.Query)["code"].ToString();
-            Assert.NotEmpty(code);
-            return Task.FromResult(code);
-        }
-    }
-
-    private static async Task<JsonDocument> RedeemAsync(Browser browser, string code, string verifier)
-    {
-        using var response = await PostTokenAsync(browser, code, verifier);
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        return await ReadJson(response);
-    }
-
-    private static Task<HttpResponseMessage> PostTokenAsync(Browser browser, string code, string verifier) =>
-        browser.SendAsync(new HttpRequestMessage(HttpMethod.Post, new Uri(SignInHosts.MagicLink, "/connect/token"))
-        {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["grant_type"] = "authorization_code",
-                ["client_id"] = SignInHosts.ClientId,
-                ["code"] = code,
-                ["redirect_uri"] = SignInHosts.AppCallback.ToString(),
-                ["code_verifier"] = verifier,
-            }),
-        });
-
-    private static async Task<JsonDocument> ReadJson(HttpResponseMessage response) =>
-        await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(Cancel), cancellationToken: Cancel);
-
-    /// <summary>The payload of a signed JWT; an encrypted token has five parts and fails here.</summary>
-    private static JsonDocument Payload(string jwt)
-    {
-        var parts = jwt.Split('.');
-        Assert.Equal(3, parts.Length);
-        return JsonDocument.Parse(WebEncoders.Base64UrlDecode(parts[1]));
-    }
-
-    private static string[] Strings(JsonElement array) => [.. array.EnumerateArray().Select(static item => item.GetString()!)];
-
-    private static string Base64Url(byte[] bytes) => WebEncoders.Base64UrlEncode(bytes);
 }

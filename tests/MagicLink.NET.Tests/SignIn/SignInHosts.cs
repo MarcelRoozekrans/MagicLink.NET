@@ -32,6 +32,21 @@ public sealed class SignInHosts : IAsyncLifetime
     /// <summary>The same address as MagicLink.NET keeps it.</summary>
     public const string NormalizedPerson = "person@example.com";
 
+    /// <summary>A person the file lists with one group, <c>readers</c>.</summary>
+    public const string OneGroupPerson = "one-group@example.com";
+
+    /// <summary>A person the file lists without groups.</summary>
+    public const string NoGroupsPerson = "no-groups@example.com";
+
+    /// <summary>A person the file lists until a test takes them out.</summary>
+    public const string RemovedLaterPerson = "removed-later@example.com";
+
+    /// <summary>An address the file does not list.</summary>
+    public const string UnlistedPerson = "unlisted@example.com";
+
+    /// <summary>The groups of <see cref="Person"/> in the file.</summary>
+    public static readonly string[] PersonGroups = ["readers", "writers"];
+
     public static readonly Uri MagicLink = new("https://magiclink.test/");
     public static readonly Uri App = new("https://app.test/");
     public static readonly Uri AppCallback = new(App, "signin-oidc");
@@ -40,6 +55,8 @@ public sealed class SignInHosts : IAsyncLifetime
     private static readonly string[] HostArgs = ["--hostBuilder:reloadConfigOnChange=false"];
 
     private readonly PostgresDatabase _database = new();
+    private readonly string _directory = Directory.CreateTempSubdirectory("magiclink-signin-hosts-").FullName;
+    private readonly List<string> _listed = [NormalizedPerson, OneGroupPerson, NoGroupsPerson, RemovedLaterPerson];
     private WebApplication? _magicLink;
     private WebApplication? _app;
 
@@ -88,8 +105,19 @@ public sealed class SignInHosts : IAsyncLifetime
         return new Browser(hosts);
     }
 
+    /// <summary>The file that says who may sign in, as a checkout of a git repository would hold it.</summary>
+    private string PeopleFile => Path.Combine(_directory, "people.json");
+
+    /// <summary>Takes <paramref name="email"/> out of the file, as a new commit would.</summary>
+    internal async Task RemoveFromFileAsync(string email)
+    {
+        _listed.Remove(email);
+        await WritePeopleFileAsync();
+    }
+
     public async ValueTask InitializeAsync()
     {
+        await WritePeopleFileAsync();
         await _database.InitializeAsync();
         if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(PostgresDatabase.Variable)))
         {
@@ -117,6 +145,22 @@ public sealed class SignInHosts : IAsyncLifetime
         }
 
         await _database.DisposeAsync();
+        Directory.Delete(_directory, recursive: true);
+    }
+
+    private async Task WritePeopleFileAsync()
+    {
+        var people = _listed.Select(static email => email switch
+        {
+            NormalizedPerson => new Dictionary<string, object>(StringComparer.Ordinal) { ["email"] = "Person@Example.com", ["groups"] = PersonGroups },
+            OneGroupPerson => new Dictionary<string, object>(StringComparer.Ordinal) { ["email"] = email, ["groups"] = new[] { "readers" } },
+            _ => new Dictionary<string, object>(StringComparer.Ordinal) { ["email"] = email },
+        });
+        var previous = File.Exists(PeopleFile) ? File.GetLastWriteTimeUtc(PeopleFile) : DateTime.UtcNow;
+        await File.WriteAllTextAsync(PeopleFile, JsonSerializer.Serialize(new { people }));
+
+        // A newer time, as a checkout of a new commit gives the file, also when this runs within the clock's resolution.
+        File.SetLastWriteTimeUtc(PeopleFile, previous.AddSeconds(1));
     }
 
     private WebApplication BuildMagicLink(string connectionString)
@@ -127,6 +171,7 @@ public sealed class SignInHosts : IAsyncLifetime
         builder.Services.AddOpenIddict()
             .AddCore(options => options.UsePostgreSql(store => store.ConnectionString = connectionString))
             .AddMagicLinkServer(server => server.SetIssuer(MagicLink).AddEphemeralEncryptionKey().AddEphemeralSigningKey());
+        builder.Services.AddMagicLinkSignInFile(options => options.Path = PeopleFile);
         builder.Services.AddSingleton<ISignInMessageSender>(Mailbox);
         builder.Services.AddSingleton<TimeProvider>(Clock);
 

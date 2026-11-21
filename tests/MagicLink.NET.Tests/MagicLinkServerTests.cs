@@ -96,9 +96,67 @@ public sealed class MagicLinkServerTests
         Assert.NotNull(app.Services.GetRequiredService<IOptions<MagicLinkSmtpOptions>>().Value);
     }
 
-    private static WebApplication Build(Uri? issuer, Action<MagicLinkOptions>? configure, Action<MagicLinkSmtpOptions>? smtp = null, ISignInMessageSender? sender = null)
+    [Fact]
+    public async Task MagicLink_does_not_start_without_a_source_of_who_may_sign_in()
+    {
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, source: static _ => { });
+
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("who may sign in", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task MagicLink_does_not_start_with_a_file_of_who_may_sign_in_that_it_cannot_read_and_says_why()
+    {
+        var missing = Path.Combine(Path.GetTempPath(), "magiclink-" + Guid.NewGuid().ToString("N") + ".json");
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, source: services => services.AddMagicLinkSignInFile(options => options.Path = missing));
+
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains(missing, exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task An_own_source_of_who_may_sign_in_replaces_the_file()
+    {
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, source: static services =>
+        {
+            services.AddMagicLinkSignInFile(static options => options.Path = "not read");
+            services.AddMagicLinkSignInSource<OwnSource>();
+        });
+
+        Assert.IsType<OwnSource>(app.Services.GetRequiredService<ISignInSource>());
+
+        // The file is no longer the source, so its start check passes without a file to read.
+        Assert.NotNull(app.Services.GetRequiredService<IOptions<MagicLinkSignInFileOptions>>().Value);
+    }
+
+    [Fact]
+    public async Task The_file_replaces_an_own_source_registered_before_it()
+    {
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, source: static services =>
+        {
+            services.AddMagicLinkSignInSource<OwnSource>();
+            services.AddMagicLinkSignInFile(static options => options.Path = "people.json");
+        });
+
+        Assert.IsType<SignInFileSource>(app.Services.GetRequiredService<ISignInSource>());
+        Assert.Single(app.Services.GetServices<ISignInSource>());
+    }
+
+    private static WebApplication Build(Uri? issuer, Action<MagicLinkOptions>? configure, Action<MagicLinkSmtpOptions>? smtp = null, ISignInMessageSender? sender = null, Action<IServiceCollection>? source = null)
     {
         var builder = WebApplication.CreateSlimBuilder(HostArgs);
+        if (source is null)
+        {
+            builder.Services.AddMagicLinkSignInSource<OwnSource>();
+        }
+        else
+        {
+            source(builder.Services);
+        }
+
         if (sender is not null || smtp is null)
         {
             // Registered before MagicLink.NET, which then keeps it; without SMTP settings the tests use their own sender.
@@ -126,6 +184,11 @@ public sealed class MagicLinkServerTests
         }
 
         return builder.Build();
+    }
+
+    private sealed class OwnSource : ISignInSource
+    {
+        public ValueTask<SignInAccess> LookUpAsync(string email, CancellationToken cancellationToken) => ValueTask.FromResult(SignInAccess.Refused);
     }
 
     private sealed class OwnSender : ISignInMessageSender

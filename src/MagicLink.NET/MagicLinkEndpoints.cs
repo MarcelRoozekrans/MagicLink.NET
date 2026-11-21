@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
@@ -17,7 +18,7 @@ namespace MagicLink;
 /// The OpenID Connect endpoints MagicLink.NET answers itself. OpenIddict validates each request before it gets here;
 /// discovery, the key set and user info are answered by OpenIddict alone.
 /// </summary>
-internal static class MagicLinkEndpoints
+internal static partial class MagicLinkEndpoints
 {
     public const string AuthorizationPath = "connect/authorize";
     public const string TokenPath = "connect/token";
@@ -59,7 +60,18 @@ internal static class MagicLinkEndpoints
             return;
         }
 
-        var identity = MagicLinkIdentity.Create(email, signedInAt.Value, request.GetScopes());
+        // Asked on every authorization, not once at sign-in, so a person taken out of the source, or moved to other
+        // groups, gets no tokens with what no longer holds.
+        var access = await context.RequestServices.GetRequiredService<ISignInSource>().LookUpAsync(email, context.RequestAborted).ConfigureAwait(false);
+        if (!access.MaySignIn)
+        {
+            Refused(Logger(context));
+            await context.SignOutAsync(MagicLinkSession.Scheme).ConfigureAwait(false);
+            await context.ForbidAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, Error(Errors.AccessDenied, "This email address may not sign in.")).ConfigureAwait(false);
+            return;
+        }
+
+        var identity = MagicLinkIdentity.Create(email, signedInAt.Value, request.GetScopes(), access.Groups);
         await context.SignInAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, new ClaimsPrincipal(identity)).ConfigureAwait(false);
     }
 
@@ -82,6 +94,7 @@ internal static class MagicLinkEndpoints
             return;
         }
 
+        MagicLinkIdentity.KeepGroupsAList(result.Principal);
         await context.SignInAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, result.Principal).ConfigureAwait(false);
     }
 
@@ -147,6 +160,11 @@ internal static class MagicLinkEndpoints
 
         return string.Join(' ', kept);
     }
+
+    private static ILogger Logger(HttpContext context) => context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("MagicLink.SignIn");
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "A person with a session may no longer sign in, by the source of who may sign in; the session is ended and no tokens are issued.")]
+    private static partial void Refused(ILogger logger);
 
     private static AuthenticationProperties Error(string error, string description) => new(new Dictionary<string, string?>(StringComparer.Ordinal)
     {
