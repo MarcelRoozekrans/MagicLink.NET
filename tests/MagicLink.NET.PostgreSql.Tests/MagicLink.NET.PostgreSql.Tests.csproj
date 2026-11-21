@@ -12,6 +12,10 @@
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
     <PackageReference Include="Microsoft.Extensions.Hosting" />
   </ItemGroup>
+  <!-- The job table scripts the package ships, compared with the migrations that run. -->
+  <ItemGroup>
+    <None Include="..\..\src\MagicLink.NET.PostgreSql\JobStoreMigrations\*.sql" LinkBase="JobStoreMigrations" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\MagicLink.NET.PostgreSql\MagicLink.NET.PostgreSql.csproj" />
   </ItemGroup>

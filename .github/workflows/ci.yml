@@ -196,6 +196,22 @@ jobs:
           MAGICLINK_AOT_PROOF_URL: http://127.0.0.1:5099
         run: dotnet test --project tests/MagicLink.NET.AotProof.Tests -c Release
 
+      # The binary seeded the hourly pruning job at startup. Make that run due now and wait for the native worker to
+      # finish it, which runs the job and OpenIddict's prune calls on the store under Native AOT.
+      - name: Run the pruning job in the native binary
+        env:
+          PGPASSWORD: magiclink
+        run: |
+          psql -h localhost -U magiclink -d magiclink -qc "UPDATE magiclink.schedulingjobs SET scheduledat = now() - interval '1 minute'"
+          for i in $(seq 1 30); do
+            done_runs=$(psql -h localhost -U magiclink -d magiclink -tAc "SELECT count(*) FROM magiclink.schedulingjobs WHERE status = 2")
+            if [ "$done_runs" = "1" ]; then echo "The pruning job ran."; exit 0; fi
+            sleep 1
+          done
+          psql -h localhost -U magiclink -d magiclink -c "SELECT typename, status, attempts, error FROM magiclink.schedulingjobs"
+          echo "The pruning job did not run within 30 seconds." >&2
+          exit 1
+
       - name: Show the native binary's log
         if: always()
         run: cat aot-proof.log || true

@@ -11,6 +11,9 @@ namespace MagicLink.PostgreSql;
 /// </summary>
 internal sealed class StoreDatabase(NpgsqlDataSource dataSource) : IAsyncDisposable, IDisposable
 {
+    /// <summary>The service key of the store's <see cref="IAsyncDbConnection"/>, which the pruning job's store uses.</summary>
+    internal const string JobStoreConnectionKey = "MagicLink.NET.PostgreSql";
+
     internal NpgsqlDataSource DataSource { get; } = dataSource;
 
     /// <summary>A new, closed connection; the generated repository methods open and close it.</summary>
