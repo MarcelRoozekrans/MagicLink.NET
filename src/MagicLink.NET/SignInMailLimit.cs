@@ -42,7 +42,7 @@ internal sealed class SignInMailLimit(TimeProvider clock)
             Sweep(at, since, window);
             if (!_sent.TryGetValue(email, out var sent))
             {
-                sent = new List<DateTimeOffset>(max);
+                sent = [];
                 _sent.Add(email, sent);
             }
 

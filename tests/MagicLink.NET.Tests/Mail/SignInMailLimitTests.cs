@@ -113,4 +113,13 @@ public sealed class SignInMailLimitTests
 
         Assert.False(limit.TryReserve("person@example.com", 2, Window, out _));
     }
+
+    [Fact]
+    public void A_limit_as_high_as_it_goes_still_works()
+    {
+        var limit = new SignInMailLimit(_clock);
+
+        Assert.True(limit.TryReserve("person@example.com", int.MaxValue, Window, out _));
+        Assert.True(limit.TryReserve("person@example.com", int.MaxValue, Window, out _));
+    }
 }
