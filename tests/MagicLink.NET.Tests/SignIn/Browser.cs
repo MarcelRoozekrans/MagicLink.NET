@@ -10,15 +10,28 @@ public sealed class Browser(IReadOnlyDictionary<string, HttpMessageHandler> host
 {
     private readonly CookieContainer _cookies = new();
     private readonly List<Uri> _visited = [];
+    private readonly Lock _lock = new();
 
     /// <summary>Every address this browser requested, in order.</summary>
-    public IList<Uri> Visited => _visited;
+    public IList<Uri> Visited
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _visited];
+            }
+        }
+    }
 
     /// <summary>Sends one request, with this browser's cookies, without following a redirect.</summary>
     public async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request)
     {
         var uri = request.RequestUri!;
-        _visited.Add(uri);
+        lock (_lock)
+        {
+            _visited.Add(uri);
+        }
 
         var cookieHeader = _cookies.GetCookieHeader(uri);
         if (cookieHeader.Length > 0)
@@ -66,6 +79,9 @@ public sealed class Browser(IReadOnlyDictionary<string, HttpMessageHandler> host
 
         throw new InvalidOperationException("More than 20 redirects.");
     }
+
+    /// <summary>Sets a cookie for <paramref name="site"/>, as if the site had set it.</summary>
+    public void SetCookie(Uri site, string name, string value) => _cookies.SetCookies(site, name + "=" + value + "; path=/; secure");
 
     /// <summary>Forgets every cookie of <paramref name="site"/>, as when a person signs out of that site.</summary>
     public void ForgetCookiesOf(Uri site)

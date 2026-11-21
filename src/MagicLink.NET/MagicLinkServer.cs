@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using OpenIddict.Server;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
@@ -9,12 +10,12 @@ internal static class MagicLinkServer
 {
     /// <summary>
     /// Adds the OpenID Connect server for browser sign-in: the authorization code flow with PKCE, the person's session
-    /// cookie, and user info. The host still registers OpenIddict's store, through <c>AddCore</c>.
+    /// cookie, the sign-in page, and user info. The host still registers OpenIddict's store, through <c>AddCore</c>.
     /// </summary>
     /// <param name="builder">OpenIddict's builder.</param>
     /// <param name="configure">
-    /// Sets what depends on the host, at least the signing and encryption keys, for example with
-    /// <c>AddSigningCertificate</c>.
+    /// Sets what depends on the host: at least the issuer, with <c>SetIssuer</c>, and the signing and encryption keys,
+    /// for example with <c>AddSigningCertificate</c>.
     /// </param>
     public static OpenIddictBuilder AddMagicLinkServer(this OpenIddictBuilder builder, Action<OpenIddictServerBuilder> configure)
     {
@@ -60,6 +61,21 @@ internal static class MagicLinkServer
 
         builder.Services.AddAuthentication()
             .AddCookie(MagicLinkSession.Scheme, MagicLinkSession.Configure);
+
+        // The link in the sign-in email is built on the issuer, never on a request's Host header, so it must be set.
+        builder.Services.AddOptions<OpenIddictServerOptions>()
+            .Validate(static options => options.Issuer is not null, "MagicLink.NET needs the issuer set, for example with SetIssuer: the link in the sign-in email is built on it.")
+            .ValidateOnStart();
+
+        builder.Services.AddOptions<MagicLinkOptions>()
+            .Validate(static options => options.CodeLifetime > TimeSpan.Zero, "MagicLinkOptions.CodeLifetime must be positive.")
+            .Validate(static options => options.MaxCodeAttempts > 0, "MagicLinkOptions.MaxCodeAttempts must be at least 1.")
+            .ValidateOnStart();
+
+        // The sign-in page: its forms carry antiforgery tokens, and its message goes to the mail sender (issue #6).
+        builder.Services.AddAntiforgery();
+        builder.Services.TryAddSingleton<ISignInMessageSender, UnsentSignInMessages>();
+        builder.Services.TryAddSingleton(TimeProvider.System);
 
         return builder;
     }
