@@ -57,20 +57,6 @@ public sealed class GroupsTests(SignInHosts hosts) : IClassFixture<SignInHosts>
     }
 
     [Fact]
-    public async Task An_address_the_file_does_not_list_gets_no_code_for_the_application()
-    {
-        var browser = hosts.NewBrowser();
-        var (authorize, _, _) = NewAuthorization();
-
-        using var response = await SignInAsync(browser, authorize, SignInHosts.UnlistedPerson);
-
-        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        var callback = QueryHelpers.ParseQuery(response.Headers.Location!.Query);
-        Assert.Equal("access_denied", callback["error"].ToString());
-        Assert.False(callback.ContainsKey("code"));
-    }
-
-    [Fact]
     public async Task An_address_taken_out_of_the_file_after_signing_in_gets_no_code_for_the_application()
     {
         var browser = hosts.NewBrowser();

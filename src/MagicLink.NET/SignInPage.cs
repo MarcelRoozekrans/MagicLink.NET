@@ -67,8 +67,8 @@ internal static partial class SignInPage
     }
 
     /// <summary>
-    /// Starts a sign-in request for the typed address, binds it to this browser, queues the email with the link and code,
-    /// and moves on to the page that asks for the code.
+    /// Starts a sign-in request for the typed address, binds it to this browser, queues the email with the link and code
+    /// when the source of who may sign in knows the address, and moves on to the page that asks for the code.
     /// </summary>
     internal static async Task StartAsync(HttpContext context)
     {
@@ -91,15 +91,30 @@ internal static partial class SignInPage
         var options = services.GetRequiredService<IOptions<MagicLinkOptions>>().Value;
         var now = Now(context);
         var email = MagicLinkSession.Normalize(typed);
-        var (request, cookie, linkToken, code) = await SignInRequest.CreateAsync(
-            Tokens(context), email, returnUrl, now, options.CodeLifetime, context.RequestAborted).ConfigureAwait(false);
+        var access = await services.GetRequiredService<ISignInSource>().LookUpAsync(email, context.RequestAborted).ConfigureAwait(false);
+
+        // An address that may not sign in gets a request too, one that nobody can confirm, and no email: the answer, the
+        // code page and the time they take are the same as for a known address, so nobody can find out which addresses
+        // exist (spec "confirm sign-in with a link or a code", criterion 4).
+        string cookie;
+        if (access.MaySignIn)
+        {
+            (var request, cookie, var linkToken, var code) = await SignInRequest.CreateAsync(
+                Tokens(context), email, returnUrl, now, options.CodeLifetime, context.RequestAborted).ConfigureAwait(false);
+            Started(Logger(context), request.Id);
+
+            // Sent in the background (ADR-015): the answer does not wait for the mail server, and takes as long whether
+            // or not an email goes out.
+            services.GetRequiredService<SignInMailQueue>().Enqueue(new SignInMessage(email, LinkTo(context, linkToken), code, now + options.CodeLifetime, request.Id));
+        }
+        else
+        {
+            (var request, cookie) = await SignInRequest.CreateRefusedAsync(
+                Tokens(context), email, returnUrl, now, options.CodeLifetime, context.RequestAborted).ConfigureAwait(false);
+            Refused(Logger(context), request.Id);
+        }
 
         context.Response.Cookies.Append(SignInRequest.BindingCookie, cookie, BindingCookieOptions(now + options.CodeLifetime));
-        Started(Logger(context), request.Id);
-
-        // Sent in the background (ADR-015): the answer does not wait for the mail server, and takes as long whether or
-        // not an email goes out.
-        services.GetRequiredService<SignInMailQueue>().Enqueue(new SignInMessage(email, LinkTo(context, linkToken), code, now + options.CodeLifetime, request.Id));
 
         // 303: the browser follows with a GET, so reloading the next page does not start another request.
         context.Response.StatusCode = StatusCodes.Status303SeeOther;
@@ -300,6 +315,10 @@ internal static partial class SignInPage
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sign-in request {RequestId} started.")]
     private static partial void Started(ILogger logger, string requestId);
+
+    // The address stays out of the log, as in every log entry of this page.
+    [LoggerMessage(Level = LogLevel.Information, Message = "Sign-in request {RequestId} was refused: by the source of who may sign in, the address may not sign in. No email is sent; the person sees the same answer as for a known address.")]
+    private static partial void Refused(ILogger logger, string requestId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Sign-in request {RequestId} was confirmed; the person is signed in.")]
     private static partial void SignedIn(ILogger logger, string requestId);

@@ -59,12 +59,28 @@ internal sealed class SignInRequest
     /// Starts a sign-in request for <paramref name="email"/>. Returns the request, the value of the binding cookie,
     /// and the link token and code for the email.
     /// </summary>
-    public static async ValueTask<(SignInRequest Request, string Cookie, string LinkToken, string Code)> CreateAsync(
+    public static ValueTask<(SignInRequest Request, string Cookie, string LinkToken, string Code)> CreateAsync(
+        IOpenIddictTokenManager tokens, string email, string returnUrl, DateTimeOffset now, TimeSpan lifetime, CancellationToken cancellationToken) =>
+        CreateAsync(tokens, email, returnUrl, now, lifetime, NewCode(), cancellationToken);
+
+    /// <summary>
+    /// Starts a sign-in request for <paramref name="email"/>, an address that may not sign in, and returns it with the
+    /// value of the binding cookie. It is stored and answered like any other request, so nobody can tell from the
+    /// answer, the code page or its timing that the address is unknown. Nobody can confirm it: no email carries its
+    /// link, and its code is a secret far longer than any code, so no typed code matches.
+    /// </summary>
+    public static async ValueTask<(SignInRequest Request, string Cookie)> CreateRefusedAsync(
         IOpenIddictTokenManager tokens, string email, string returnUrl, DateTimeOffset now, TimeSpan lifetime, CancellationToken cancellationToken)
+    {
+        var (request, cookie, _, _) = await CreateAsync(tokens, email, returnUrl, now, lifetime, NewSecret(), cancellationToken).ConfigureAwait(false);
+        return (request, cookie);
+    }
+
+    private static async ValueTask<(SignInRequest Request, string Cookie, string LinkToken, string Code)> CreateAsync(
+        IOpenIddictTokenManager tokens, string email, string returnUrl, DateTimeOffset now, TimeSpan lifetime, string code, CancellationToken cancellationToken)
     {
         var binding = NewSecret();
         var linkToken = NewSecret();
-        var code = NewCode();
         var data = new SignInData(returnUrl, Hash(binding), CodeHash(binding, code), Attempts: 0);
 
         var token = await tokens.CreateAsync(
