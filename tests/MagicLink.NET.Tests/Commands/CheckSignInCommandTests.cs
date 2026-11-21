@@ -124,6 +124,17 @@ public sealed class CheckSignInCommandTests(PostgreSqlUserDatabase database) : I
         Assert.Contains("lets the made-up address", output, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Without_a_source_nobody_can_sign_in_and_the_command_says_so()
+    {
+        await using var app = Host(static _ => { });
+
+        var (exitCode, output) = await RunAndCaptureAsync(app, ["check-sign-in", "ann@example.com"]);
+
+        Assert.Equal(2, exitCode);
+        Assert.Contains("No source of who may sign in", output, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData]
     [InlineData("not an address")]
