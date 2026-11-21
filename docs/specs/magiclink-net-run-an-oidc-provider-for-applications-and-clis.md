@@ -29,15 +29,17 @@ An application that speaks OIDC, in the browser or as a CLI, signs a person in t
 
 1. An application that speaks OIDC can sign a person in through MagicLink.NET in the browser.
 2. An application can extend a session with a refresh token, without the person requesting a new email.
+3. A CLI can sign a person in with the OAuth device authorization grant: it receives a user code, the person enters it in a browser and signs in there with the link or the code, and the CLI then receives its tokens.
 
 A criterion for the Themis.NET CLI plugin was removed on 2026-11-20, because that plugin does not exist yet and the criterion could not be checked.
 
 ## Open questions
 
-* *The device flow for CLIs stays in scope but has no acceptance criterion now. Is it checked later through the Themis.NET Specs, or does it get its own criterion here?*
+* The device flow gets its own criterion (3) here, not through the Themis.NET Specs (Marcel, 2026-11-21).
 
 ## Tasks
 
 * https://github.com/MarcelRoozekrans/MagicLink.NET/issues/2
 * https://github.com/MarcelRoozekrans/MagicLink.NET/issues/3
 * https://github.com/MarcelRoozekrans/MagicLink.NET/issues/10
+* https://github.com/MarcelRoozekrans/MagicLink.NET/issues/24
