@@ -6,10 +6,12 @@ namespace MagicLink;
 /// <c>groups</c> claim of the tokens.
 /// </summary>
 /// <remarks>
-/// MagicLink.NET ships a file kept in git as a source, registered with
-/// <see cref="SignInSourceRegistration.AddMagicLinkSignInFile"/>; anyone can write their own, for example against an API
-/// or LDAP, and register it with <see cref="SignInSourceRegistration.AddMagicLinkSignInSource{TSource}"/>. MagicLink.NET
-/// does not start without a source. A source only reads: it never creates or changes people.
+/// MagicLink.NET ships two sources: a file kept in git, registered with
+/// <see cref="SignInSourceRegistration.AddMagicLinkSignInFile"/>, and a query on an existing PostgreSQL or SQL Server
+/// database, registered with <see cref="SignInSourceRegistration.AddMagicLinkSignInDatabase"/>. Anyone can write their
+/// own, for example against an API or LDAP, and register it with
+/// <see cref="SignInSourceRegistration.AddMagicLinkSignInSource{TSource}"/>. MagicLink.NET does not start without a
+/// source. A source only reads: it never creates or changes people.
 /// </remarks>
 internal interface ISignInSource
 {
