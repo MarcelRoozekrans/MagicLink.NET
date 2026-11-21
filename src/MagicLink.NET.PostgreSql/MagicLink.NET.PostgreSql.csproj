@@ -10,11 +10,15 @@
     <PackageReference Include="OpenIddict.Core" />
     <PackageReference Include="ZeroAlloc.ORM" />
     <PackageReference Include="ZeroAlloc.ORM.Generator" PrivateAssets="all" />
+    <PackageReference Include="ZeroAlloc.Scheduling" />
+    <PackageReference Include="ZeroAlloc.Scheduling.Orm" />
   </ItemGroup>
   <!-- The migrations run from the assembly and ship as plain scripts for a DBA who applies them by hand. -->
   <ItemGroup>
     <EmbeddedResource Include="Migrations/*.sql" />
     <None Include="Migrations/*.sql" Pack="true" PackagePath="sql/" />
+    <!-- The job table of the pruning job, which ZeroAlloc.Scheduling.Orm applies from code; the scripts are for a DBA. -->
+    <None Include="JobStoreMigrations/*.sql" Pack="true" PackagePath="sql/scheduling/" />
   </ItemGroup>
   <!-- This package has its own README, in place of the repository's. -->
   <ItemGroup>

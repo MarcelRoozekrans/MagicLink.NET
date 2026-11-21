@@ -94,13 +94,15 @@ Four public entity classes (`MagicLinkApplication`, `MagicLinkAuthorization`, `M
 
 ### Pruning job
 
-A `[Job(Every = Every.Hour)]` class in the package calls `IOpenIddictTokenManager.PruneAsync` and `IOpenIddictAuthorizationManager.PruneAsync` with a threshold of now minus 14 days, the same default as OpenIddict's Quartz integration. It is registered only when `PruneExpiredData` is true.
+A `[Job(Every = Every.Hour)]` class in the package calls `IOpenIddictTokenManager.PruneAsync` and `IOpenIddictAuthorizationManager.PruneAsync` with a threshold of now minus 14 days, the same default as OpenIddict's Quartz integration. It is registered only when `PruneExpiredData` is true, which `UsePostgreSql` reads from its callback when it runs.
 
-- **Connection.** The job store uses MagicLink's own keyed `IAsyncDbConnection`, through the new keyed `WithOrm` overload. That connection sets `Search Path=magiclink`, so ZeroAlloc.Scheduling's `SchedulingJobs` table, which its migration creates without a schema, lands in the `magiclink` schema too.
-- **Migrations.** ZeroAlloc.Scheduling.Orm's migration source runs in the same startup step as the store's own, and `ApplyMigrationsOnStartup = false` switches both off. Its SQL ships next to the store's scripts for DBAs.
-- **Scheduling setup.** When the host has not called `AddScheduling`, the package calls it, with the generated ZeroAlloc.Serialisation dispatcher as job serializer, since the reflection-based one does not fit AOT. When the host has, the package only adds its job. Both cases are tested.
-- **Scope.** ZeroAlloc.Scheduling's worker creates a DI scope per run, so the job takes the scoped OpenIddict managers in its constructor.
-- **Once in total.** The recurring job is seeded with an upsert, so every instance writes the same row, and the store claims a due job with a claim token. A test starts two hosts on one database and checks one recurring row and one run per due time.
+- **Connection.** The job store uses MagicLink's own keyed `IAsyncDbConnection`, built from the store's data source, through the keyed `WithOrm` overload. That data source sets `Search Path=magiclink`, so ZeroAlloc.Scheduling's `SchedulingJobs` table, which its migration creates without a schema, lands in the `magiclink` schema too.
+- **Migrations.** ZeroAlloc.Scheduling.Orm's migration source runs in the same startup step as the store's own, under the store's advisory lock, and `ApplyMigrationsOnStartup = false` switches both off. Its SQL ships next to the store's scripts, under `sql/scheduling/`, for DBAs.
+- **Scheduling setup.** When the host has not called `AddScheduling`, the package calls it and adds the job store. When the host has, the package only adds its job, which then runs on the host's job store; such a host calls `AddScheduling` before `UsePostgreSql`. Both cases are tested.
+- **No job serializer.** The job is a class without fields, so ZeroAlloc.Scheduling (2.4.1 and later) generates an executor and a recurring seed that never serialize it. The package registers no serializer and does not reference ZeroAlloc.Serialisation, and a host whose own serializer does not know the job's type still works.
+- **Scope.** ZeroAlloc.Scheduling's worker creates a DI scope per run and passes it as `JobContext.Services`, so the job takes the scoped OpenIddict managers from there, not from its constructor.
+- **Internal job.** The job stays internal. ZeroAlloc.Scheduling 2.4.2 gives the generated registration of an internal job internal access, documents the generated members, and resolves the scoped job store of the recurring seed in a scope of its own; up to 2.4.1 the registration was public, its missing docs broke the build, and a host that validates scopes failed to start.
+- **Once in total.** The recurring job is seeded with one atomic insert, which a unique index over the live runs of a recurring job keeps to one row, and the store claims a due job with a claim token. A test starts two hosts on one database and checks one recurring row and one run per due time.
 
 ### The AOT proof moves to the real store
 
