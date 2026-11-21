@@ -3,4 +3,13 @@
     <PackageId>MagicLink.NET</PackageId>
     <Description>A small OpenID Connect provider that signs people in with a link or a short code sent by email. Host it in an ASP.NET Core app with services.Add..., or run it on its own.</Description>
   </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="OpenIddict.Core" />
+    <PackageReference Include="OpenIddict.Server.AspNetCore" />
+  </ItemGroup>
+  <!-- The hosting API is internal until issue #11 makes it public; the tests host it meanwhile. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="MagicLink.NET.Tests" />
+  </ItemGroup>
 </Project>

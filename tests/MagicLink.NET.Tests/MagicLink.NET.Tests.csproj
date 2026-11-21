@@ -6,11 +6,20 @@
     <NoWarn>$(NoWarn);MA0004</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="xunit.v3" />
     <Using Include="Xunit" />
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <!-- An OpenID Connect client application, and both apps in memory. -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+  </ItemGroup>
+  <!-- A database of its own per test class, as the store's tests have. -->
+  <ItemGroup>
+    <Compile Include="..\MagicLink.NET.PostgreSql.Tests\PostgresDatabase.cs" Link="PostgresDatabase.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\MagicLink.NET\MagicLink.NET.csproj" />
+    <ProjectReference Include="..\..\src\MagicLink.NET.PostgreSql\MagicLink.NET.PostgreSql.csproj" />
   </ItemGroup>
 </Project>
