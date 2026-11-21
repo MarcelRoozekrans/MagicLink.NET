@@ -37,6 +37,30 @@ internal sealed class ListLogger<T> : ILogger<T>
         }
     }
 
+    /// <summary>Waits until <paramref name="count"/> entries at <paramref name="level"/> were logged.</summary>
+    public async Task WaitForCountAsync(LogLevel level, int count)
+    {
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        while (CountAt(level) < count)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
+        }
+    }
+
+    private int CountAt(LogLevel level)
+    {
+        var count = 0;
+        foreach (var entry in Entries)
+        {
+            if (entry.Level == level)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
+
     public IDisposable? BeginScope<TState>(TState state)
         where TState : notnull => null;
 

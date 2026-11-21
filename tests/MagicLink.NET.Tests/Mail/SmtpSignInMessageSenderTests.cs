@@ -69,12 +69,23 @@ public sealed class SmtpSignInMessageSenderTests
         await using var server = new FakeSmtpServer(withholdDataReply: true);
         var sender = Sender(server);
         using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Cancel);
-        cancel.CancelAfter(TimeSpan.FromMilliseconds(500));
-        var started = TimeProvider.System.GetTimestamp();
+        var send = sender.SendAsync(Message, cancel.Token).AsTask();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sender.SendAsync(Message, cancel.Token).AsTask());
+        // Cancelled only once the server holds the email and withholds its answer.
+        using (var waiting = CancellationTokenSource.CreateLinkedTokenSource(Cancel))
+        {
+            waiting.CancelAfter(TimeSpan.FromSeconds(30));
+            while (server.Messages.Count == 0)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(10), waiting.Token);
+            }
+        }
 
-        Assert.True(TimeProvider.System.GetElapsedTime(started) < TimeSpan.FromSeconds(10));
+        var cancelled = TimeProvider.System.GetTimestamp();
+        await cancel.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => send);
+        Assert.True(TimeProvider.System.GetElapsedTime(cancelled) < TimeSpan.FromSeconds(10));
         Assert.Single(server.Messages);
     }
 

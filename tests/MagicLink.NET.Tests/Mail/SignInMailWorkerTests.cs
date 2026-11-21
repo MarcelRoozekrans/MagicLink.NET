@@ -84,6 +84,41 @@ public sealed class SignInMailWorkerTests
     }
 
     [Fact]
+    public async Task A_send_that_fails_after_the_deadline_is_not_tried_again()
+    {
+        var sender = new GatedSender(fail: true);
+        await using var worker = await Worker.StartAsync(sender, attempts: 3, deadline: TimeSpan.FromMilliseconds(100));
+
+        worker.Queue.Enqueue(Message("request-1"));
+        await worker.Log.WaitForAsync(LogLevel.Error);
+        sender.Open();
+        await sender.EndedAsync(1);
+
+        // The retry would start its next attempt after 1 ms; the deadline cancelled it.
+        await Task.Delay(TimeSpan.FromMilliseconds(200), Cancel);
+        Assert.Equal(1, sender.Started);
+    }
+
+    [Fact]
+    public async Task Sends_given_up_at_the_deadline_still_count_toward_the_parallel_limit()
+    {
+        var sender = new GatedSender(fail: false);
+        await using var worker = await Worker.StartAsync(sender, attempts: 1, deadline: TimeSpan.FromMilliseconds(50));
+        for (var i = 0; i < SignInMailWorker.Parallel + 2; i++)
+        {
+            worker.Queue.Enqueue(Message("request-" + i));
+        }
+
+        await worker.Log.WaitForCountAsync(LogLevel.Error, SignInMailWorker.Parallel);
+        await Task.Delay(TimeSpan.FromMilliseconds(200), Cancel);
+        Assert.Equal(SignInMailWorker.Parallel, sender.Started);
+
+        sender.Open();
+        await sender.EndedAsync(SignInMailWorker.Parallel + 2);
+        Assert.Equal(SignInMailWorker.Parallel, sender.MaxActive);
+    }
+
+    [Fact]
     public async Task Stopping_drops_what_is_still_waiting_without_an_error()
     {
         var sender = new FlakySender(failures: 0, waitForever: true);
@@ -169,6 +204,56 @@ public sealed class SignInMailWorkerTests
         {
             await _worker.StopAsync(CancellationToken.None);
             _worker.Dispose();
+        }
+    }
+
+    /// <summary>Ignores its token and waits until <see cref="Open"/>, then fails or succeeds; counts what runs at once.</summary>
+    private sealed class GatedSender(bool fail) : ISignInMessageSender
+    {
+        private readonly TaskCompletionSource _gate = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _started;
+        private int _ended;
+        private int _active;
+        private int _maxActive;
+
+        public int Started => Volatile.Read(ref _started);
+
+        public int MaxActive => Volatile.Read(ref _maxActive);
+
+        public void Open() => _gate.TrySetResult();
+
+        public async ValueTask SendAsync(SignInMessage message, CancellationToken cancellationToken)
+        {
+            Interlocked.Increment(ref _started);
+            var active = Interlocked.Increment(ref _active);
+            int max;
+            while (active > (max = Volatile.Read(ref _maxActive)) && Interlocked.CompareExchange(ref _maxActive, active, max) != max)
+            {
+            }
+
+            try
+            {
+                await _gate.Task;
+                if (fail)
+                {
+                    throw new InvalidOperationException("The mail server gave up.");
+                }
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _active);
+                Interlocked.Increment(ref _ended);
+            }
+        }
+
+        public async Task EndedAsync(int count)
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(Cancel);
+            timeout.CancelAfter(TimeSpan.FromSeconds(30));
+            while (Volatile.Read(ref _ended) < count)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(10), timeout.Token);
+            }
         }
     }
 
