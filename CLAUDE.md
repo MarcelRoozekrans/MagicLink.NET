@@ -19,7 +19,7 @@ When you are given one goal, such as "finish milestone First version", work thro
 ## What is specific to MagicLink.NET
 
 * Likely ZeroAlloc fits: ZeroAlloc.ORM for the own OpenIddict store (EF Core is ruled out by ADR-016), ZeroAlloc.Results, ZeroAlloc.Validation, ZeroAlloc.Telemetry and ZeroAlloc.Resilience. ZeroAlloc.Templates may serve as a starting point. OpenIddict expects the standard ASP.NET Core dependency injection; do not fight it.
-* Native AOT is a goal, not yet a requirement, until the proof in issue #1 succeeds (ADR-016).
+* Native AOT is a requirement (ADR-016, amended 2026-11-21). The `aot-proof` CI job checks it on every pull request.
 * Target .NET 10. Package ids are `MagicLink.NET` and `MagicLink.NET.*` (ADR-012).
 * Tests run against real PostgreSQL and SQL Server; CI provides both as service containers (see `.github/workflows/ci.yml`).
 
@@ -40,4 +40,4 @@ A pack without `-p:Version` fails on purpose with `MLVERSION001`; see `Directory
 * Package versions live only in `Directory.Packages.props`; a `PackageReference` never carries a `Version`.
 * Public members in `src/` need XML docs; the build fails without them.
 * Conventional commits, checked by commitlint on every pull request (`.commitlintrc.yml`). release-please builds the changelog and the version from them. Never put nested parentheses in a commit body: release-please cannot parse such a commit and drops it from the changelog while the workflow still succeeds.
-* Required checks on `main`: `build-test`, `pack`, `commitlint`, `baseline / gitleaks`, `baseline / codeql (csharp)`, `baseline / nuget-audit` and `codecov/project`.
+* Required checks on `main`: `build-test`, `pack`, `commitlint`, `baseline / gitleaks`, `baseline / codeql (csharp)`, `baseline / nuget-audit`, `codecov/project` and `aot-proof`.
