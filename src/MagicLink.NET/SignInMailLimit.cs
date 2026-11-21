@@ -7,12 +7,13 @@ namespace MagicLink;
 /// </summary>
 /// <remarks>
 /// Only addresses that may sign in are counted, since only they get emails; the page answers the same either way, so
-/// the count tells nobody which addresses exist. An address is forgotten once its last email is a window old.
+/// the count tells nobody which addresses exist. The clock is read under the lock, so each address's times are in
+/// order. An address is forgotten once its last email is a window old.
 /// </remarks>
-internal sealed class SignInMailLimit
+internal sealed class SignInMailLimit(TimeProvider clock)
 {
     private readonly Lock _lock = new();
-    private readonly Dictionary<string, Queue<DateTimeOffset>> _sent = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<DateTimeOffset>> _sent = new(StringComparer.Ordinal);
     private DateTimeOffset _lastSweep = DateTimeOffset.MinValue;
 
     /// <summary>How many addresses are counted now; tests read it to see that old ones are forgotten.</summary>
@@ -28,18 +29,20 @@ internal sealed class SignInMailLimit
     }
 
     /// <summary>
-    /// True, and counted, when <paramref name="email"/> got fewer than <paramref name="max"/> emails in the
-    /// <paramref name="window"/> before <paramref name="now"/>; false, and not counted, when it got that many already.
+    /// True when <paramref name="email"/> got fewer than <paramref name="max"/> emails in the last
+    /// <paramref name="window"/>; the email is then counted, at <paramref name="at"/>, until it is released. False, and
+    /// nothing counted, when the address got that many already.
     /// </summary>
-    public bool TryTake(string email, DateTimeOffset now, int max, TimeSpan window)
+    public bool TryReserve(string email, int max, TimeSpan window, out DateTimeOffset at)
     {
-        var since = now - window;
         lock (_lock)
         {
-            Sweep(now, since, window);
+            at = clock.GetUtcNow();
+            var since = at - window;
+            Sweep(at, since, window);
             if (!_sent.TryGetValue(email, out var sent))
             {
-                sent = new Queue<DateTimeOffset>(max);
+                sent = new List<DateTimeOffset>(max);
                 _sent.Add(email, sent);
             }
 
@@ -49,8 +52,23 @@ internal sealed class SignInMailLimit
                 return false;
             }
 
-            sent.Enqueue(now);
+            sent.Add(at);
             return true;
+        }
+    }
+
+    /// <summary>
+    /// Stops counting the email reserved for <paramref name="email"/> at <paramref name="at"/>, because it was not sent
+    /// after all; nothing happens when it is no longer counted.
+    /// </summary>
+    public void Release(string email, DateTimeOffset at)
+    {
+        lock (_lock)
+        {
+            if (_sent.TryGetValue(email, out var sent))
+            {
+                sent.Remove(at);
+            }
         }
     }
 
@@ -82,12 +100,15 @@ internal sealed class SignInMailLimit
         }
     }
 
-    /// <summary>Drops the emails of <paramref name="sent"/> that are a window old.</summary>
-    private static void Forget(Queue<DateTimeOffset> sent, DateTimeOffset since)
+    /// <summary>Drops the emails of <paramref name="sent"/>, oldest first, that are a window old.</summary>
+    private static void Forget(List<DateTimeOffset> sent, DateTimeOffset since)
     {
-        while (sent.TryPeek(out var oldest) && oldest <= since)
+        var old = 0;
+        while (old < sent.Count && sent[old] <= since)
         {
-            sent.Dequeue();
+            old++;
         }
+
+        sent.RemoveRange(0, old);
     }
 }

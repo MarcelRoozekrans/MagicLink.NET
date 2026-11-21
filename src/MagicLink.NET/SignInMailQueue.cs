@@ -27,17 +27,21 @@ internal sealed partial class SignInMailQueue(ILogger<SignInMailQueue> logger)
     /// <summary>Where <see cref="SignInMailWorker"/> takes the emails from.</summary>
     public ChannelReader<SignInMessage> Reader => _channel.Reader;
 
-    /// <summary>Adds <paramref name="message"/> without waiting; when the queue is full the email is dropped and logged.</summary>
-    public void Enqueue(SignInMessage message)
+    /// <summary>
+    /// Adds <paramref name="message"/> without waiting and returns true; when the queue is full the email is dropped and
+    /// logged, and false is returned.
+    /// </summary>
+    public bool Enqueue(SignInMessage message)
     {
         ArgumentNullException.ThrowIfNull(message);
         if (_channel.Writer.TryWrite(message))
         {
             Interlocked.Increment(ref _queued);
-            return;
+            return true;
         }
 
         Full(logger, message.RequestId, Capacity);
+        return false;
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "The sign-in email for request {RequestId} was not sent: {Capacity} emails are already waiting to be sent.")]

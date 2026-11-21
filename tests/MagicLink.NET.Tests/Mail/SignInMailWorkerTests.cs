@@ -142,10 +142,10 @@ public sealed class SignInMailWorkerTests
         var queue = new SignInMailQueue(log);
         for (var i = 0; i < SignInMailQueue.Capacity; i++)
         {
-            queue.Enqueue(Message("request-" + i));
+            Assert.True(queue.Enqueue(Message("request-" + i)));
         }
 
-        queue.Enqueue(Message("one-too-many"));
+        Assert.False(queue.Enqueue(Message("one-too-many")));
 
         Assert.Equal(SignInMailQueue.Capacity, queue.Queued);
         var entry = Assert.Single(log.Entries);
