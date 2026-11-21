@@ -16,6 +16,9 @@ internal static class MagicLinkIdentity
     /// <summary>The claim with the person's groups, as the source of who may sign in returns them (ADR-014).</summary>
     public const string GroupsClaim = "groups";
 
+    /// <summary>Where each claim goes; one delegate for every identity, created once.</summary>
+    private static readonly Func<Claim, IEnumerable<string>> DestinationsOf = Destinations;
+
     /// <summary>
     /// The identity for the person with <paramref name="email"/>, who signed in at <paramref name="authenticatedAt"/>,
     /// for an authorization request that asked for <paramref name="scopes"/>, with the <paramref name="groups"/> the source
@@ -41,7 +44,7 @@ internal static class MagicLinkIdentity
         }
 
         identity.SetScopes(scopes);
-        identity.SetDestinations(Destinations);
+        identity.SetDestinations(DestinationsOf);
         return identity;
     }
 
@@ -62,7 +65,7 @@ internal static class MagicLinkIdentity
         SetGroups(principal.Identities.First(), groups);
 
         // A new claim has no destinations yet; the same rules as at authorization give them.
-        principal.SetDestinations(Destinations);
+        principal.SetDestinations(DestinationsOf);
     }
 
     /// <summary>The groups as one claim holding a JSON array, which OpenIddict writes as a list even for one group.</summary>
