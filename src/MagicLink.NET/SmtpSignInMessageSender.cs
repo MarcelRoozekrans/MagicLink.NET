@@ -44,7 +44,17 @@ internal sealed class SmtpSignInMessageSender : ISignInMessageSender
             client.Credentials = new NetworkCredential(options.UserName, options.Password);
         }
 
-        await client.SendMailAsync(mail, cancellationToken).ConfigureAwait(false);
+        // SmtpClient waits for the server's answer to the end of the email without watching the token, up to its own
+        // 100-second timeout. Cancelling therefore closes this send's connection, which ends that wait too.
+        using var abort = cancellationToken.Register(static state => ((SmtpClient)state!).Dispose(), client);
+        try
+        {
+            await client.SendMailAsync(mail, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException && cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException("Sending the sign-in email was cancelled.", exception, cancellationToken);
+        }
     }
 
     /// <summary>The text of the email: the link to open in the browser that started the sign-in, and the code.</summary>

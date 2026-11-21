@@ -18,10 +18,12 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
 
     /// <param name="advertiseLogin">Whether the server asks clients to sign in with AUTH LOGIN.</param>
     /// <param name="refuseRecipients">Whether the server refuses every recipient, as for an address it does not know.</param>
-    public FakeSmtpServer(bool advertiseLogin = false, bool refuseRecipients = false)
+    /// <param name="withholdDataReply">Whether the server never answers the end of an email, as a stalled server would.</param>
+    public FakeSmtpServer(bool advertiseLogin = false, bool refuseRecipients = false, bool withholdDataReply = false)
     {
         AdvertiseLogin = advertiseLogin;
         RefuseRecipients = refuseRecipients;
+        WithholdDataReply = withholdDataReply;
         _listener.Start();
         _serving = ServeAsync();
     }
@@ -29,6 +31,8 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
     public bool AdvertiseLogin { get; }
 
     public bool RefuseRecipients { get; }
+
+    public bool WithholdDataReply { get; }
 
     public int Port => ((IPEndPoint)_listener.LocalEndpoint).Port;
 
@@ -152,6 +156,11 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
         lock (_lock)
         {
             _received.Add(current);
+        }
+
+        if (WithholdDataReply)
+        {
+            await Task.Delay(Timeout.Infinite, _stop.Token);
         }
 
         await writer.WriteLineAsync("250 OK");

@@ -14,6 +14,12 @@ internal sealed partial class SignInMailWorker : BackgroundService
     /// <summary>How many emails are sent at the same time.</summary>
     public const int Parallel = 4;
 
+    /// <summary>
+    /// How long one email may take, its retries included, before it is given up. The retry gives each attempt 30 seconds
+    /// through the cancellation token; this also frees the worker from a sender that does not honour that token.
+    /// </summary>
+    internal TimeSpan SendDeadline { get; init; } = TimeSpan.FromMinutes(2);
+
     private readonly SignInMailQueue _queue;
     private readonly ISignInMailDelivery _delivery;
     private readonly ILogger<SignInMailWorker> _logger;
@@ -57,7 +63,8 @@ internal sealed partial class SignInMailWorker : BackgroundService
     {
         try
         {
-            await _delivery.SendAsync(message, stoppingToken).ConfigureAwait(false);
+            // A send still running at the deadline is left to finish or fail on its own; its outcome is not awaited.
+            await _delivery.SendAsync(message, stoppingToken).AsTask().WaitAsync(SendDeadline, stoppingToken).ConfigureAwait(false);
             Sent(_logger, message.RequestId);
         }
 #pragma warning disable CA1031 // Whatever a sender throws must not stop the emails of everyone else.

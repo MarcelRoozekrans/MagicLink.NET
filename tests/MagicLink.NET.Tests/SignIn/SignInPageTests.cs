@@ -366,8 +366,11 @@ public sealed class SignInPageTests(SignInHosts hosts) : IClassFixture<SignInHos
             form = await HtmlForm.ReadAsync(emailForm);
         }
 
+        var queued = hosts.Queued;
         using var response = await form.SubmitAsync(browser, ("email", SignInHosts.Person));
 
+        // The next test expects every earlier email to have arrived, so this one is waited for too.
+        await hosts.Mailbox.WaitForAsync(queued);
         var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"), static value => value.StartsWith("__Host-MagicLink.SignIn=", StringComparison.Ordinal));
         Assert.Contains("; secure", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("; httponly", cookie, StringComparison.OrdinalIgnoreCase);

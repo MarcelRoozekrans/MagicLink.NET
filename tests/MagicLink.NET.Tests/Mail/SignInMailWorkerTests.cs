@@ -71,6 +71,19 @@ public sealed class SignInMailWorkerTests
     }
 
     [Fact]
+    public async Task A_sender_that_ignores_cancellation_is_given_up_at_the_deadline()
+    {
+        var sender = new FlakySender(failures: 0, ignoreCancellation: true);
+        await using var worker = await Worker.StartAsync(sender, attempts: 1, deadline: TimeSpan.FromMilliseconds(200));
+
+        worker.Queue.Enqueue(Message("request-1"));
+        var error = await worker.Log.WaitForAsync(LogLevel.Error);
+
+        Assert.Contains("request-1", error.Message, StringComparison.Ordinal);
+        Assert.IsType<TimeoutException>(error.Exception);
+    }
+
+    [Fact]
     public async Task Stopping_drops_what_is_still_waiting_without_an_error()
     {
         var sender = new FlakySender(failures: 0, waitForever: true);
@@ -106,6 +119,15 @@ public sealed class SignInMailWorkerTests
     }
 
     [Fact]
+    public void An_email_is_given_up_after_two_minutes_by_default()
+    {
+        using var worker = new SignInMailWorker(
+            new SignInMailQueue(new ListLogger<SignInMailQueue>()), new FlakySender(failures: 0), new SignInMailDeliveryResiliencePolicies(), new ListLogger<SignInMailWorker>());
+
+        Assert.Equal(TimeSpan.FromMinutes(2), worker.SendDeadline);
+    }
+
+    [Fact]
     public void The_default_retry_makes_three_attempts()
     {
         var retry = new SignInMailDeliveryResiliencePolicies().Retry;
@@ -133,12 +155,12 @@ public sealed class SignInMailWorkerTests
 
         public ListLogger<SignInMailWorker> Log { get; }
 
-        public static async Task<Worker> StartAsync(ISignInMessageSender sender, int attempts = 3)
+        public static async Task<Worker> StartAsync(ISignInMessageSender sender, int attempts = 3, TimeSpan? deadline = null)
         {
             var queue = new SignInMailQueue(new ListLogger<SignInMailQueue>());
             var log = new ListLogger<SignInMailWorker>();
             var policies = new SignInMailDeliveryResiliencePolicies { Retry = new RetryPolicy(attempts, 1, false, 0) };
-            var worker = new SignInMailWorker(queue, sender, policies, log);
+            var worker = new SignInMailWorker(queue, sender, policies, log) { SendDeadline = deadline ?? TimeSpan.FromSeconds(30) };
             await worker.StartAsync(Cancel);
             return new Worker(worker, queue, log);
         }
@@ -151,7 +173,7 @@ public sealed class SignInMailWorkerTests
     }
 
     /// <summary>Fails the first <c>failures</c> calls, then keeps what it is asked to send.</summary>
-    private sealed class FlakySender(int failures, Func<Exception>? failure = null, bool waitForever = false) : ISignInMessageSender
+    private sealed class FlakySender(int failures, Func<Exception>? failure = null, bool waitForever = false, bool ignoreCancellation = false) : ISignInMessageSender
     {
         private readonly System.Threading.Channels.Channel<SignInMessage> _sent = System.Threading.Channels.Channel.CreateUnbounded<SignInMessage>();
         private readonly Lock _lock = new();
@@ -177,6 +199,11 @@ public sealed class SignInMailWorkerTests
             if (Interlocked.Increment(ref _calls) <= failures)
             {
                 throw failure?.Invoke() ?? new InvalidOperationException("The mail server is down.");
+            }
+
+            if (ignoreCancellation)
+            {
+                await new TaskCompletionSource().Task;
             }
 
             if (waitForever)

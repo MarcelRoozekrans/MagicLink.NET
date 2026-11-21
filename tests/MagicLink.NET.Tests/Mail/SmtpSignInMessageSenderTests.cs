@@ -63,6 +63,21 @@ public sealed class SmtpSignInMessageSenderTests
         Assert.Empty(server.Messages);
     }
 
+    [Fact]
+    public async Task Cancelling_stops_a_send_that_waits_for_a_stalled_server()
+    {
+        await using var server = new FakeSmtpServer(withholdDataReply: true);
+        var sender = Sender(server);
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(Cancel);
+        cancel.CancelAfter(TimeSpan.FromMilliseconds(500));
+        var started = TimeProvider.System.GetTimestamp();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => sender.SendAsync(Message, cancel.Token).AsTask());
+
+        Assert.True(TimeProvider.System.GetElapsedTime(started) < TimeSpan.FromSeconds(10));
+        Assert.Single(server.Messages);
+    }
+
     private static SmtpSignInMessageSender Sender(FakeSmtpServer server, Action<MagicLinkSmtpOptions>? configure = null)
     {
         var options = new MagicLinkSmtpOptions
