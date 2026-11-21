@@ -112,7 +112,10 @@ internal static partial class MagicLinkEndpoints
                 return;
             }
 
-            MagicLinkIdentity.ReplaceGroups(principal, access.Groups);
+            // Without a scope parameter a refresh keeps every scope of the refresh token; OpenIddict has already refused
+            // a scope parameter that asks for more than that.
+            var requested = request.GetScopes();
+            MagicLinkIdentity.PrepareRefresh(principal, access.Groups, requested.IsEmpty ? principal.GetScopes() : requested);
         }
         else
         {

@@ -16,8 +16,11 @@ internal static class MagicLinkIdentity
     /// <summary>The claim with the person's groups, as the source of who may sign in returns them (ADR-014).</summary>
     public const string GroupsClaim = "groups";
 
-    /// <summary>Where each claim goes; one delegate for every identity, created once.</summary>
-    private static readonly Func<Claim, IEnumerable<string>> DestinationsOf = Destinations;
+    /// <summary>Where each claim goes when the email scope is granted; one delegate for every identity, created once.</summary>
+    private static readonly Func<Claim, IEnumerable<string>> WithEmail = static claim => Destinations(claim, email: true);
+
+    /// <summary>Where each claim goes when the email scope is not granted.</summary>
+    private static readonly Func<Claim, IEnumerable<string>> WithoutEmail = static claim => Destinations(claim, email: false);
 
     /// <summary>
     /// The identity for the person with <paramref name="email"/>, who signed in at <paramref name="authenticatedAt"/>,
@@ -44,7 +47,7 @@ internal static class MagicLinkIdentity
         }
 
         identity.SetScopes(scopes);
-        identity.SetDestinations(DestinationsOf);
+        identity.SetDestinations(identity.HasScope(Scopes.Email) ? WithEmail : WithoutEmail);
         return identity;
     }
 
@@ -53,24 +56,34 @@ internal static class MagicLinkIdentity
     /// the list into a claim per group, and OpenIddict writes a single claim as a string, while applications expect the
     /// groups as a list whatever its length.
     /// </summary>
-    public static void KeepGroupsAList(ClaimsPrincipal principal) => ReplaceGroups(principal, principal.GetClaims(GroupsClaim));
-
-    /// <summary>
-    /// Replaces the groups of a principal restored from a refresh token with <paramref name="groups"/>, as the source of
-    /// who may sign in returns them now, in one claim holding a list.
-    /// </summary>
-    public static void ReplaceGroups(ClaimsPrincipal principal, ImmutableArray<string> groups)
+    public static void KeepGroupsAList(ClaimsPrincipal principal)
     {
-        principal.RemoveClaims(GroupsClaim);
-        if (groups.IsDefaultOrEmpty)
-        {
-            return;
-        }
-
-        SetGroups(principal.Identities.First(), groups);
+        ReplaceGroups(principal, principal.GetClaims(GroupsClaim));
 
         // A new claim has no destinations yet; the same rules as at authorization give them.
-        principal.SetDestinations(DestinationsOf);
+        principal.SetDestinations(principal.HasScope(Scopes.Email) ? WithEmail : WithoutEmail);
+    }
+
+    /// <summary>
+    /// Prepares a principal restored from a refresh token for new tokens: the groups become <paramref name="groups"/>,
+    /// as the source of who may sign in returns them now, and every claim goes where the <paramref name="scopes"/> this
+    /// refresh grants allow. A refresh may ask for fewer scopes than the refresh token holds; OpenIddict narrows the
+    /// scopes of the access token then, but keeps each claim's stored destinations, so they are set again here.
+    /// </summary>
+    public static void PrepareRefresh(ClaimsPrincipal principal, ImmutableArray<string> groups, ImmutableArray<string> scopes)
+    {
+        ReplaceGroups(principal, groups);
+        principal.SetDestinations(scopes.Contains(Scopes.Email, StringComparer.Ordinal) ? WithEmail : WithoutEmail);
+    }
+
+    /// <summary>Replaces the groups claims of <paramref name="principal"/> with one claim holding <paramref name="groups"/>.</summary>
+    private static void ReplaceGroups(ClaimsPrincipal principal, ImmutableArray<string> groups)
+    {
+        principal.RemoveClaims(GroupsClaim);
+        if (!groups.IsDefaultOrEmpty)
+        {
+            SetGroups(principal.Identities.First(), groups);
+        }
     }
 
     /// <summary>The groups as one claim holding a JSON array, which OpenIddict writes as a list even for one group.</summary>
@@ -95,7 +108,7 @@ internal static class MagicLinkIdentity
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
     }
 
-    private static IEnumerable<string> Destinations(Claim claim)
+    private static IEnumerable<string> Destinations(Claim claim, bool email)
     {
         switch (claim.Type)
         {
@@ -103,7 +116,7 @@ internal static class MagicLinkIdentity
                 return [OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken];
 
             // The address is proven, so email_verified is always true; both go out only with the email scope.
-            case Claims.Email or Claims.EmailVerified when claim.Subject is { } identity && identity.HasScope(Scopes.Email):
+            case Claims.Email or Claims.EmailVerified when email:
                 return [OpenIddictConstants.Destinations.AccessToken, OpenIddictConstants.Destinations.IdentityToken];
 
             // Applications take teams and roles from the groups (ADR-009), as from any other identity provider, so they

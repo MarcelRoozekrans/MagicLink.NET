@@ -68,6 +68,42 @@ public sealed class RefreshTokenTests(SignInHosts hosts) : IClassFixture<SignInH
         Assert.False(idToken.RootElement.TryGetProperty("email", out _));
     }
 
+    [Theory]
+    [InlineData(SignInHosts.Person)]
+    [InlineData(SignInHosts.NoGroupsPerson)]
+    public async Task A_refresh_that_narrows_the_scopes_to_leave_out_email_gets_no_email_address(string email)
+    {
+        using var tokens = await SignInAsync(OfflineScope, email);
+
+        using var response = await PostRefreshAsync(hosts.NewBrowser(), RefreshToken(tokens), scope: "openid offline_access");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var refreshed = await ReadJson(response);
+        using var accessToken = Payload(refreshed.RootElement.GetProperty("access_token").GetString()!);
+        Assert.False(accessToken.RootElement.TryGetProperty("email", out _));
+        Assert.False(accessToken.RootElement.TryGetProperty("email_verified", out _));
+        using var idToken = Payload(refreshed.RootElement.GetProperty("id_token").GetString()!);
+        Assert.False(idToken.RootElement.TryGetProperty("email", out _));
+        Assert.False(idToken.RootElement.TryGetProperty("email_verified", out _));
+    }
+
+    [Fact]
+    public async Task A_narrowed_refresh_leaves_the_scopes_of_the_next_refresh_token_as_they_were()
+    {
+        using var tokens = await SignInAsync(OfflineScope);
+        using var narrowed = await PostRefreshAsync(hosts.NewBrowser(), RefreshToken(tokens), scope: "openid offline_access");
+        using var narrowedTokens = await ReadJson(narrowed);
+
+        using var response = await PostRefreshAsync(hosts.NewBrowser(), RefreshToken(narrowedTokens));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var refreshed = await ReadJson(response);
+        using var accessToken = Payload(refreshed.RootElement.GetProperty("access_token").GetString()!);
+        Assert.Equal(SignInHosts.NormalizedPerson, accessToken.RootElement.GetProperty("email").GetString());
+        using var idToken = Payload(refreshed.RootElement.GetProperty("id_token").GetString()!);
+        Assert.True(idToken.RootElement.GetProperty("email_verified").GetBoolean());
+    }
+
     [Fact]
     public async Task A_refresh_token_cannot_widen_the_scopes()
     {

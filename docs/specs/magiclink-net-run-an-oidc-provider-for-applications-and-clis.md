@@ -36,7 +36,7 @@ A criterion for the Themis.NET CLI plugin was removed on 2026-11-20, because tha
 ## Open questions
 
 * The device flow gets its own criterion (3) here, not through the Themis.NET Specs (Marcel, 2026-11-21).
-* An application gets a refresh token when it asks for the `offline_access` scope and its registration allows the refresh token grant. Each refresh gives a new refresh token. On every refresh MagicLink.NET asks the source of who may sign in again, as it does on every authorization: a person taken out of the source gets `invalid_grant`, and a person moved to other groups gets tokens with the new groups. A refresh token lasts OpenIddict's default of 14 days; the host can change that in the `AddMagicLinkServer` callback with `SetRefreshTokenLifetime`. Written down while building issue #10.
+* An application gets a refresh token when it asks for the `offline_access` scope and its registration allows the refresh token grant. Each refresh gives a new refresh token. On every refresh MagicLink.NET asks the source of who may sign in again, as it does on every authorization: a person taken out of the source gets `invalid_grant`, and a person moved to other groups gets tokens with the new groups. A refresh may ask for fewer scopes than its refresh token holds; the email address then stays out of the new access and identity tokens, while the new refresh token keeps the scopes of the old one. A refresh token lasts OpenIddict's default of 14 days; the host can change that in the `AddMagicLinkServer` callback with `SetRefreshTokenLifetime`. Written down while building issue #10.
 
 ## Tasks
 
