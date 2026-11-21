@@ -2,7 +2,7 @@
 
 ## Status
 
-accepted (2026-11-20)
+accepted (2026-11-20); the cross-device part is superseded by [ADR-249](0249-confirm-the-sign-in-link-only-in-the-browser-that-started-the-sign-in.md) (2026-11-21)
 
 ## Context
 
@@ -17,7 +17,7 @@ Options considered:
 ## Decision
 
 * The email holds both a link and a short code. The link opens a page with a sign-in button; only pressing it signs the person in. The code can be typed on the screen where sign-in started instead.
-* A sign-in request is bound to the browser that started it. When the link is confirmed on another device, MagicLink.NET first asks the person to confirm it was them.
+* A sign-in request is bound to the browser that started it. ~~When the link is confirmed on another device, MagicLink.NET first asks the person to confirm it was them.~~ Superseded by ADR-249: the link works only in the browser that started the sign-in.
 * Link and code belong to one sign-in request and both become invalid once either is used.
 
 ## Consequences
