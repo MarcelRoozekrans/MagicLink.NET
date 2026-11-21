@@ -19,7 +19,8 @@ namespace MagicLink.Tests.SignIn;
 /// Core's own OpenID Connect handler, so it speaks OIDC as any application would.
 /// </summary>
 /// <remarks>
-/// Sending the email is issue #6; until then <see cref="Mailbox"/> catches the link and code the page would mail.
+/// <see cref="Mailbox"/> replaces the SMTP sender and catches the link and code; the emails reach it in the background,
+/// as they would reach a mail server.
 /// </remarks>
 public sealed class SignInHosts : IAsyncLifetime
 {
@@ -42,8 +43,14 @@ public sealed class SignInHosts : IAsyncLifetime
     private WebApplication? _magicLink;
     private WebApplication? _app;
 
-    /// <summary>The sign-in emails MagicLink.NET would have sent.</summary>
+    /// <summary>The sign-in emails MagicLink.NET sent.</summary>
     internal Mailbox Mailbox { get; } = new();
+
+    /// <summary>
+    /// How many sign-in emails MagicLink.NET queued so far. The page queues an email before it answers, so unlike
+    /// <see cref="Mailbox"/>, which the email reaches later, this shows straight after an answer whether an email was asked for.
+    /// </summary>
+    internal int Queued => MagicLinkServices.GetRequiredService<SignInMailQueue>().Queued;
 
     /// <summary>MagicLink.NET's clock, which a test can move forward.</summary>
     internal TestClock Clock { get; } = new();

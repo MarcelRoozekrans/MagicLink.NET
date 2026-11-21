@@ -28,7 +28,8 @@ MagicLink.NET sends the sign-in email through SMTP by default, or through a send
 
 ## Open questions
 
-None yet.
+* *How many sign-ins may be started, per address and per client?* No Spec limits it. Someone could start many sign-ins for one address and so send that person many emails. The queue holds at most 1,000 unsent emails and drops and logs any beyond that, which bounds memory but not the emails to one person. A limit fits here or in the Spec for confirming sign-in (issue #5). Written down while building issue #4 and again for issue #6.
+* *Does SMTP need TLS from the first byte, on port 465?* The SMTP sender uses the SmtpClient that comes with .NET, which runs under Native AOT, but supports only STARTTLS, on port 587 or 25. A server that offers only port 465 needs an own sender, or a different SMTP client in a later version.
 
 ## Tasks
 

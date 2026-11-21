@@ -44,12 +44,12 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         var browser = hosts.NewBrowser();
         (await hosts.SignInAsync(browser, AppMe)).Dispose();
         browser.ForgetCookiesOf(SignInHosts.App);
-        var sent = hosts.Mailbox.Count;
+        var queued = hosts.Queued;
 
         using var response = await browser.NavigateAsync(AppMe);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(sent, hosts.Mailbox.Count);
+        Assert.Equal(queued, hosts.Queued);
     }
 
     [Fact]
@@ -237,12 +237,12 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
     {
         var browser = hosts.NewBrowser();
         (await hosts.SignInAsync(browser, AppMe)).Dispose();
-        var sent = hosts.Mailbox.Count;
+        var queued = hosts.Queued;
         var (authorize, _, _) = NewAuthorization(extra: "&max_age=" + maxAge);
 
         await CodeFrom(await browser.NavigateAsync(authorize, stopAtHost: SignInHosts.App.Host));
 
-        Assert.Equal(sent, hosts.Mailbox.Count);
+        Assert.Equal(queued, hosts.Queued);
     }
 
     [Fact]

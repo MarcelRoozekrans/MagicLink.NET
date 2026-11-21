@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 
 namespace MagicLink.Tests;
@@ -36,23 +36,75 @@ public sealed class MagicLinkServerTests
         Assert.Contains(setting, exception.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task Without_a_mail_sender_the_email_is_not_sent_and_the_log_says_so_without_link_or_code()
+    [Theory]
+    [InlineData(null, 587, "Sign-in <signin@example.com>", "Host")]
+    [InlineData("smtp.example.com", 0, "signin@example.com", "Port")]
+    [InlineData("smtp.example.com", 587, null, "From")]
+    [InlineData("smtp.example.com", 587, "not an address", "From")]
+    public async Task MagicLink_does_not_start_without_the_settings_of_its_default_smtp_sender(string? host, int port, string? from, string setting)
     {
-        var logger = new ListLogger<UnsentSignInMessages>();
-        var sender = new UnsentSignInMessages(logger);
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, smtp: options =>
+        {
+            options.Host = host;
+            options.Port = port;
+            options.From = from;
+        });
 
-        await sender.SendAsync(new SignInMessage("person@example.com", new Uri("https://magiclink.test/signin/link?token=secret"), "ABCD-EFGH", DateTimeOffset.UtcNow), TestContext.Current.CancellationToken);
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
 
-        var entry = Assert.Single(logger.Entries);
-        Assert.Equal(LogLevel.Warning, entry.Level);
-        Assert.DoesNotContain("secret", entry.Message, StringComparison.Ordinal);
-        Assert.DoesNotContain("ABCD", entry.Message, StringComparison.Ordinal);
+        Assert.Contains("MagicLinkSmtpOptions." + setting, exception.Message, StringComparison.Ordinal);
     }
 
-    private static WebApplication Build(Uri? issuer, Action<MagicLinkOptions>? configure)
+    [Fact]
+    public async Task MagicLink_does_not_start_with_an_empty_subject()
+    {
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, smtp: static options =>
+        {
+            options.Host = "smtp.example.com";
+            options.From = "signin@example.com";
+            options.Subject = " ";
+        });
+
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("MagicLinkSmtpOptions.Subject", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task By_setting_alone_the_email_is_sent_over_smtp()
+    {
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, smtp: static options =>
+        {
+            options.Host = "smtp.example.com";
+            options.From = "signin@example.com";
+        });
+
+        Assert.IsType<SmtpSignInMessageSender>(app.Services.GetRequiredService<ISignInMessageSender>());
+        Assert.NotNull(app.Services.GetRequiredService<IOptions<MagicLinkSmtpOptions>>().Value);
+        Assert.Single(app.Services.GetServices<IHostedService>().OfType<SignInMailWorker>());
+    }
+
+    [Fact]
+    public async Task An_own_sender_replaces_smtp_and_needs_none_of_its_settings()
+    {
+        var own = new OwnSender();
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, smtp: null, sender: own);
+
+        Assert.Same(own, app.Services.GetRequiredService<ISignInMessageSender>());
+
+        // Without SMTP settings the start check would refuse SMTP; it passes for the own sender.
+        Assert.NotNull(app.Services.GetRequiredService<IOptions<MagicLinkSmtpOptions>>().Value);
+    }
+
+    private static WebApplication Build(Uri? issuer, Action<MagicLinkOptions>? configure, Action<MagicLinkSmtpOptions>? smtp = null, ISignInMessageSender? sender = null)
     {
         var builder = WebApplication.CreateSlimBuilder(HostArgs);
+        if (sender is not null || smtp is null)
+        {
+            // Registered before MagicLink.NET, which then keeps it; without SMTP settings the tests use their own sender.
+            builder.Services.AddSingleton(sender ?? new OwnSender());
+        }
+
         builder.Services.AddOpenIddict()
             .AddCore(options => options.UsePostgreSql(store => store.ConnectionString = "Host=localhost;Database=unused"))
             .AddMagicLinkServer(server =>
@@ -68,19 +120,16 @@ public sealed class MagicLinkServerTests
             builder.Services.Configure(configure);
         }
 
+        if (smtp is not null)
+        {
+            builder.Services.Configure(smtp);
+        }
+
         return builder.Build();
     }
 
-    private sealed class ListLogger<T> : ILogger<T>
+    private sealed class OwnSender : ISignInMessageSender
     {
-        public List<(LogLevel Level, string Message)> Entries { get; } = [];
-
-        public IDisposable? BeginScope<TState>(TState state)
-            where TState : notnull => null;
-
-        public bool IsEnabled(LogLevel logLevel) => true;
-
-        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
-            Entries.Add((logLevel, formatter(state, exception)));
+        public ValueTask SendAsync(SignInMessage message, CancellationToken cancellationToken) => ValueTask.CompletedTask;
     }
 }

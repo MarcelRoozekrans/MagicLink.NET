@@ -67,8 +67,8 @@ internal static partial class SignInPage
     }
 
     /// <summary>
-    /// Starts a sign-in request for the typed address, binds it to this browser, hands the link and code to the mail
-    /// sender, and moves on to the page that asks for the code.
+    /// Starts a sign-in request for the typed address, binds it to this browser, queues the email with the link and code,
+    /// and moves on to the page that asks for the code.
     /// </summary>
     internal static async Task StartAsync(HttpContext context)
     {
@@ -97,8 +97,9 @@ internal static partial class SignInPage
         context.Response.Cookies.Append(SignInRequest.BindingCookie, cookie, BindingCookieOptions(now + options.CodeLifetime));
         Started(Logger(context), request.Id);
 
-        var message = new SignInMessage(email, LinkTo(context, linkToken), code, now + options.CodeLifetime);
-        await services.GetRequiredService<ISignInMessageSender>().SendAsync(message, context.RequestAborted).ConfigureAwait(false);
+        // Sent in the background (ADR-015): the answer does not wait for the mail server, and takes as long whether or
+        // not an email goes out.
+        services.GetRequiredService<SignInMailQueue>().Enqueue(new SignInMessage(email, LinkTo(context, linkToken), code, now + options.CodeLifetime, request.Id));
 
         // 303: the browser follows with a GET, so reloading the next page does not start another request.
         context.Response.StatusCode = StatusCodes.Status303SeeOther;
