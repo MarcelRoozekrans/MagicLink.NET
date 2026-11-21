@@ -109,14 +109,41 @@ public sealed class SignInHosts : IAsyncLifetime
     {
         SignInPageVisits++;
         var returnUrl = context.Request.Query["ReturnUrl"].ToString();
-        if (!returnUrl.StartsWith('/') || returnUrl.StartsWith("//", StringComparison.Ordinal))
+        if (!IsLocalUrl(returnUrl))
         {
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return;
         }
 
         await MagicLinkSession.SignInAsync(context, Person);
-        context.Response.Redirect(returnUrl);
+        await Results.LocalRedirect(returnUrl).ExecuteAsync(context);
+    }
+
+    /// <summary>
+    /// True for a path on this site only. Browsers read <c>//host</c> and <c>/\host</c> as another site, so a second
+    /// character of <c>/</c> or <c>\</c> is refused, as are control characters, which browsers strip.
+    /// </summary>
+    internal static bool IsLocalUrl(string url)
+    {
+        if (url.Length == 0 || url[0] != '/')
+        {
+            return false;
+        }
+
+        if (url.Length > 1 && url[1] is '/' or '\\')
+        {
+            return false;
+        }
+
+        foreach (var character in url)
+        {
+            if (char.IsControl(character))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static async Task RegisterClientAsync(IServiceProvider services)

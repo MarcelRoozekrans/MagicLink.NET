@@ -68,6 +68,21 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         Assert.DoesNotContain("domain=", cookie, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("https://evil.example/")]
+    [InlineData("//evil.example/")]
+    [InlineData("/\\evil.example/")]
+    [InlineData("/\t/evil.example/")]
+    [InlineData("")]
+    public async Task The_sign_in_page_returns_only_to_this_site(string returnUrl)
+    {
+        var browser = hosts.NewBrowser();
+
+        using var response = await browser.SendAsync(new HttpRequestMessage(HttpMethod.Get, new Uri(SignInHosts.MagicLink, "/signin?ReturnUrl=" + Uri.EscapeDataString(returnUrl))));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     [Fact]
     public async Task Without_a_session_the_authorization_request_goes_to_the_sign_in_page_and_back()
     {
