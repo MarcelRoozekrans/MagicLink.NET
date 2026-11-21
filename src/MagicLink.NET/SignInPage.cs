@@ -210,7 +210,7 @@ internal static partial class SignInPage
             return;
         }
 
-        if (!await request.TryRedeemAsync(tokens, context.RequestAborted).ConfigureAwait(false))
+        if (!await request.TryRedeemAsync(tokens, Now(context), context.RequestAborted).ConfigureAwait(false))
         {
             await SignInHtml.NoLongerValidAsync(context).ConfigureAwait(false);
             return;
@@ -258,8 +258,8 @@ internal static partial class SignInPage
     /// </summary>
     private static Uri LinkTo(HttpContext context, string linkToken)
     {
-        var issuer = context.RequestServices.GetRequiredService<IOptionsMonitor<OpenIddictServerOptions>>().CurrentValue.Issuer
-            ?? throw new InvalidOperationException("MagicLink.NET needs the issuer set, to build the link in the sign-in email.");
+        // AddMagicLinkServer refuses to start without an issuer, so it is set here.
+        var issuer = context.RequestServices.GetRequiredService<IOptionsMonitor<OpenIddictServerOptions>>().CurrentValue.Issuer!;
         return new Uri(issuer.AbsoluteUri.TrimEnd('/') + LinkPath + "?" + TokenField + "=" + Uri.EscapeDataString(linkToken));
     }
 
@@ -292,7 +292,7 @@ internal static partial class SignInPage
 
     private static int MaxAttempts(HttpContext context) => context.RequestServices.GetRequiredService<IOptions<MagicLinkOptions>>().Value.MaxCodeAttempts;
 
-    private static DateTimeOffset Now(HttpContext context) => (context.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System).GetUtcNow();
+    private static DateTimeOffset Now(HttpContext context) => context.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow();
 
     private static ILogger Logger(HttpContext context) => context.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("MagicLink.SignIn");
 

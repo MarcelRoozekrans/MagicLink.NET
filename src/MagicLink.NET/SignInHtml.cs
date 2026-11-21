@@ -28,7 +28,7 @@ internal static class SignInHtml
             .Append("<h1>Sign in</h1>")
             .Append(Error(error))
             .Append("<form method=\"post\" action=\"").Append(Encode(Action(context, SignInPage.Path))).Append("\">")
-            .Append(Hidden(antiforgery.FormFieldName, antiforgery.RequestToken))
+            .Append(Hidden(antiforgery.FormFieldName, antiforgery.RequestToken!))
             .Append(Hidden(SignInPage.ReturnUrlField, returnUrl))
             .Append("<label for=\"email\">Email address</label>")
             .Append("<input id=\"email\" name=\"").Append(SignInPage.EmailField).Append("\" type=\"email\" autocomplete=\"email\" required autofocus value=\"")
@@ -45,7 +45,7 @@ internal static class SignInHtml
             .Append("Open the link in this browser, or type the code here.</p>")
             .Append(Error(error))
             .Append("<form method=\"post\" action=\"").Append(Encode(Action(context, SignInPage.CodePath))).Append("\">")
-            .Append(Hidden(antiforgery.FormFieldName, antiforgery.RequestToken))
+            .Append(Hidden(antiforgery.FormFieldName, antiforgery.RequestToken!))
             .Append("<label for=\"code\">Code</label>")
             .Append("<input id=\"code\" name=\"").Append(SignInPage.CodeField).Append("\" autocomplete=\"one-time-code\" autocapitalize=\"characters\" spellcheck=\"false\" required autofocus>")
             .Append("<button type=\"submit\">Sign in</button>")
@@ -58,7 +58,7 @@ internal static class SignInHtml
             .Append("<h1>Sign in</h1>")
             .Append("<p>Sign in as ").Append(Encode(email)).Append(".</p>")
             .Append("<form method=\"post\" action=\"").Append(Encode(Action(context, SignInPage.LinkPath))).Append("\">")
-            .Append(Hidden(antiforgery.FormFieldName, antiforgery.RequestToken))
+            .Append(Hidden(antiforgery.FormFieldName, antiforgery.RequestToken!))
             .Append(Hidden(SignInPage.TokenField, linkToken))
             .Append("<button type=\"submit\">Sign in</button>")
             .Append("</form>")
@@ -105,8 +105,9 @@ internal static class SignInHtml
 
     private static string Action(HttpContext context, string path) => context.Request.PathBase + path;
 
-    private static string Hidden(string name, string? value) =>
-        "<input type=\"hidden\" name=\"" + Encode(name) + "\" value=\"" + Encode(value ?? string.Empty) + "\">";
+    // GetAndStoreTokens always returns a request token, so the forms pass it with !.
+    private static string Hidden(string name, string value) =>
+        "<input type=\"hidden\" name=\"" + Encode(name) + "\" value=\"" + Encode(value) + "\">";
 
     private static string Error(string? error) => error is null ? string.Empty : "<p class=\"error\" role=\"alert\">" + Encode(error) + "</p>";
 

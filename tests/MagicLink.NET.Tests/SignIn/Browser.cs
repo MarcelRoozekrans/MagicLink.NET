@@ -80,6 +80,9 @@ public sealed class Browser(IReadOnlyDictionary<string, HttpMessageHandler> host
         throw new InvalidOperationException("More than 20 redirects.");
     }
 
+    /// <summary>Sets a cookie for <paramref name="site"/>, as if the site had set it.</summary>
+    public void SetCookie(Uri site, string name, string value) => _cookies.SetCookies(site, name + "=" + value + "; path=/; secure");
+
     /// <summary>Forgets every cookie of <paramref name="site"/>, as when a person signs out of that site.</summary>
     public void ForgetCookiesOf(Uri site)
     {

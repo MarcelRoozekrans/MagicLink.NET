@@ -32,7 +32,7 @@ internal sealed class SignInRequest
     private readonly object _token;
     private SignInData _data;
 
-    private SignInRequest(object token, string id, string email, DateTimeOffset? expiresAt, string? status, SignInData data)
+    private SignInRequest(object token, string id, string email, DateTimeOffset expiresAt, string? status, SignInData data)
     {
         _token = token;
         Id = id;
@@ -51,7 +51,7 @@ internal sealed class SignInRequest
     /// <summary>The path on this site to return to once signed in.</summary>
     public string ReturnUrl => _data.ReturnUrl;
 
-    private DateTimeOffset? ExpiresAt { get; }
+    private DateTimeOffset ExpiresAt { get; }
 
     private string? Status { get; }
 
@@ -123,8 +123,10 @@ internal sealed class SignInRequest
     public int AttemptsLeft(int maxAttempts) => Math.Max(0, maxAttempts - _data.Attempts);
 
     /// <summary>
-    /// Tries <paramref name="code"/>, typed in the browser holding <paramref name="cookie"/>. The attempt is counted in
-    /// the store before the code is compared, so parallel guesses cannot exceed the limit.
+    /// Tries <paramref name="code"/>, typed in the browser holding <paramref name="cookie"/>. One write, checked for
+    /// concurrency, counts the attempt and records the outcome: used up for the right code, rejected for the last
+    /// wrong one. Only when that write succeeds does the outcome count, so parallel guesses cannot exceed the limit,
+    /// and a write that fails leaves the request as it was.
     /// </summary>
     public async ValueTask<CodeOutcome> TryCodeAsync(
         IOpenIddictTokenManager tokens, string cookie, string code, DateTimeOffset now, int maxAttempts, CancellationToken cancellationToken)
@@ -134,38 +136,30 @@ internal sealed class SignInRequest
             return CodeOutcome.NoLongerValid;
         }
 
+        var right = SameHash(_data.CodeHash, CodeHash(binding, code));
         var counted = _data with { Attempts = _data.Attempts + 1 };
-        var descriptor = new OpenIddictTokenDescriptor();
-        await tokens.PopulateAsync(descriptor, _token, cancellationToken).ConfigureAwait(false);
-        descriptor.Payload = counted.Write();
-        try
+        var status = right ? Statuses.Redeemed : counted.Attempts < maxAttempts ? Statuses.Valid : Statuses.Rejected;
+        if (!await TryUpdateAsync(tokens, counted, status, now, cancellationToken).ConfigureAwait(false))
         {
-            await tokens.UpdateAsync(_token, descriptor, cancellationToken).ConfigureAwait(false);
-        }
-        catch (OpenIddictExceptions.ConcurrencyException)
-        {
-            // Another attempt or the link changed the request meanwhile; this code was not compared.
+            // Another attempt or the link changed the request meanwhile; this attempt was not counted.
             return CodeOutcome.TryAgain;
         }
 
         _data = counted;
-        if (!CryptographicOperations.FixedTimeEquals(Convert.FromBase64String(_data.CodeHash), Convert.FromBase64String(CodeHash(binding, code))))
+        return status switch
         {
-            if (_data.Attempts < maxAttempts)
-            {
-                return CodeOutcome.Wrong;
-            }
-
-            await tokens.TryRejectAsync(_token, cancellationToken).ConfigureAwait(false);
-            return CodeOutcome.NoLongerValid;
-        }
-
-        return await tokens.TryRedeemAsync(_token, cancellationToken).ConfigureAwait(false) ? CodeOutcome.SignedIn : CodeOutcome.NoLongerValid;
+            Statuses.Redeemed => CodeOutcome.SignedIn,
+            Statuses.Valid => CodeOutcome.Wrong,
+            _ => CodeOutcome.NoLongerValid,
+        };
     }
 
-    /// <summary>Uses up the request for a link confirmed in the browser that started it. False when it was used first.</summary>
-    public ValueTask<bool> TryRedeemAsync(IOpenIddictTokenManager tokens, CancellationToken cancellationToken) =>
-        tokens.TryRedeemAsync(_token, cancellationToken);
+    /// <summary>
+    /// Uses up the request for a link confirmed in the browser that started it. False when the request changed
+    /// meanwhile, because the link or the code was used, or a code was tried, at the same moment.
+    /// </summary>
+    public ValueTask<bool> TryRedeemAsync(IOpenIddictTokenManager tokens, DateTimeOffset now, CancellationToken cancellationToken) =>
+        TryUpdateAsync(tokens, _data, Statuses.Redeemed, now, cancellationToken);
 
     /// <summary>A code as the person may type it: lower case, with spaces or a dash between the groups.</summary>
     internal static string NormalizeCode(string code)
@@ -195,6 +189,33 @@ internal sealed class SignInRequest
         return new string(code);
     }
 
+    /// <summary>
+    /// Writes <paramref name="data"/> and <paramref name="status"/> in one update that succeeds only when nobody
+    /// changed the request since it was read. False on such a conflict; any other failure is unexpected and throws.
+    /// </summary>
+    private async ValueTask<bool> TryUpdateAsync(
+        IOpenIddictTokenManager tokens, SignInData data, string status, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var descriptor = new OpenIddictTokenDescriptor();
+        await tokens.PopulateAsync(descriptor, _token, cancellationToken).ConfigureAwait(false);
+        descriptor.Payload = data.Write();
+        descriptor.Status = status;
+        if (string.Equals(status, Statuses.Redeemed, StringComparison.Ordinal))
+        {
+            descriptor.RedemptionDate = now;
+        }
+
+        try
+        {
+            await tokens.UpdateAsync(_token, descriptor, cancellationToken).ConfigureAwait(false);
+            return true;
+        }
+        catch (OpenIddictExceptions.ConcurrencyException)
+        {
+            return false;
+        }
+    }
+
     private static async ValueTask<SignInRequest?> ReadAsync(IOpenIddictTokenManager tokens, object token, CancellationToken cancellationToken)
     {
         if (!await tokens.HasTypeAsync(token, TokenType, cancellationToken).ConfigureAwait(false))
@@ -205,18 +226,21 @@ internal sealed class SignInRequest
         var id = await tokens.GetIdAsync(token, cancellationToken).ConfigureAwait(false);
         var email = await tokens.GetSubjectAsync(token, cancellationToken).ConfigureAwait(false);
         var payload = await tokens.GetPayloadAsync(token, cancellationToken).ConfigureAwait(false);
-        if (id is null || email is null || !SignInData.TryRead(payload, out var data))
+        var expiration = await tokens.GetExpirationDateAsync(token, cancellationToken).ConfigureAwait(false);
+        if (id is null || email is null || expiration is not { } expiresAt || !SignInData.TryRead(payload, out var data))
         {
             return null;
         }
 
-        var expiresAt = await tokens.GetExpirationDateAsync(token, cancellationToken).ConfigureAwait(false);
         var status = await tokens.GetStatusAsync(token, cancellationToken).ConfigureAwait(false);
         return new SignInRequest(token, id, email, expiresAt, status, data);
     }
 
-    private bool IsBoundTo(string binding) =>
-        CryptographicOperations.FixedTimeEquals(Convert.FromBase64String(_data.BindingHash), Convert.FromBase64String(Hash(binding)));
+    private bool IsBoundTo(string binding) => SameHash(_data.BindingHash, Hash(binding));
+
+    /// <summary>Compares two hashes as stored, in constant time; a damaged stored hash simply does not match.</summary>
+    private static bool SameHash(string stored, string computed) =>
+        CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(stored), Encoding.UTF8.GetBytes(computed));
 
     private static bool TrySplitCookie(string? cookie, out string id, out string binding)
     {
@@ -254,17 +278,30 @@ internal sealed class SignInRequest
             {
                 using var document = JsonDocument.Parse(payload);
                 var root = document.RootElement;
-                data = new SignInData(
-                    root.GetProperty("return_url").GetString()!,
-                    root.GetProperty("binding_hash").GetString()!,
-                    root.GetProperty("code_hash").GetString()!,
-                    root.GetProperty("attempts").GetInt32());
-                return data.ReturnUrl is not null && data.BindingHash is not null && data.CodeHash is not null;
+                if (root.ValueKind != JsonValueKind.Object
+                    || !TryGetString(root, "return_url", out var returnUrl)
+                    || !TryGetString(root, "binding_hash", out var bindingHash)
+                    || !TryGetString(root, "code_hash", out var codeHash)
+                    || !root.TryGetProperty("attempts", out var attempts)
+                    || attempts.ValueKind != JsonValueKind.Number
+                    || !attempts.TryGetInt32(out var attemptCount))
+                {
+                    return false;
+                }
+
+                data = new SignInData(returnUrl, bindingHash, codeHash, attemptCount);
+                return true;
             }
-            catch (Exception exception) when (exception is JsonException or KeyNotFoundException or InvalidOperationException or FormatException)
+            catch (JsonException)
             {
                 return false;
             }
+        }
+
+        private static bool TryGetString(JsonElement element, string name, out string value)
+        {
+            value = element.TryGetProperty(name, out var property) && property.ValueKind == JsonValueKind.String ? property.GetString()! : string.Empty;
+            return value.Length > 0;
         }
 
         public string Write()

@@ -75,6 +75,7 @@ internal static class MagicLinkServer
         // The sign-in page: its forms carry antiforgery tokens, and its message goes to the mail sender (issue #6).
         builder.Services.AddAntiforgery();
         builder.Services.TryAddSingleton<ISignInMessageSender, UnsentSignInMessages>();
+        builder.Services.TryAddSingleton(TimeProvider.System);
 
         return builder;
     }

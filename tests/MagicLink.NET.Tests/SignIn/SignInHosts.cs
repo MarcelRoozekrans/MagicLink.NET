@@ -48,6 +48,9 @@ public sealed class SignInHosts : IAsyncLifetime
     /// <summary>MagicLink.NET's clock, which a test can move forward.</summary>
     internal TestClock Clock { get; } = new();
 
+    /// <summary>MagicLink.NET's services, to put a sign-in request in the store as only a damaged store would hold it.</summary>
+    internal IServiceProvider MagicLinkServices => _magicLink!.Services;
+
     /// <summary>A fresh browser, without cookies, that can reach both hosts.</summary>
     public Browser NewBrowser() => NewBrowser(alias: null);
 

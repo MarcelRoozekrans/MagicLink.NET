@@ -47,7 +47,7 @@ internal static class MagicLinkEndpoints
         var email = session.Succeeded ? session.Principal.FindFirst(Claims.Email)?.Value : null;
         var signedInAt = session.Properties?.IssuedUtc;
 
-        if (email is null || signedInAt is null || MustSignInAgain(request, signedInAt.Value, context.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System))
+        if (email is null || signedInAt is null || MustSignInAgain(request, signedInAt.Value, context.RequestServices.GetRequiredService<TimeProvider>()))
         {
             if (request.HasPromptValue(PromptValues.None))
             {
