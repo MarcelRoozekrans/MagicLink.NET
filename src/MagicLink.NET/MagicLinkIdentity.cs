@@ -53,15 +53,20 @@ internal static class MagicLinkIdentity
     /// the list into a claim per group, and OpenIddict writes a single claim as a string, while applications expect the
     /// groups as a list whatever its length.
     /// </summary>
-    public static void KeepGroupsAList(ClaimsPrincipal principal)
+    public static void KeepGroupsAList(ClaimsPrincipal principal) => ReplaceGroups(principal, principal.GetClaims(GroupsClaim));
+
+    /// <summary>
+    /// Replaces the groups of a principal restored from a refresh token with <paramref name="groups"/>, as the source of
+    /// who may sign in returns them now, in one claim holding a list.
+    /// </summary>
+    public static void ReplaceGroups(ClaimsPrincipal principal, ImmutableArray<string> groups)
     {
-        var groups = principal.GetClaims(GroupsClaim);
-        if (groups.IsEmpty)
+        principal.RemoveClaims(GroupsClaim);
+        if (groups.IsDefaultOrEmpty)
         {
             return;
         }
 
-        principal.RemoveClaims(GroupsClaim);
         SetGroups(principal.Identities.First(), groups);
 
         // A new claim has no destinations yet; the same rules as at authorization give them.
