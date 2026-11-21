@@ -53,14 +53,16 @@ internal static class MagicLinkIdentity
     public static void KeepGroupsAList(ClaimsPrincipal principal)
     {
         var groups = principal.GetClaims(GroupsClaim);
-        if (!groups.IsEmpty && principal.Identity is ClaimsIdentity identity)
+        if (groups.IsEmpty)
         {
-            identity.RemoveClaims(GroupsClaim);
-            SetGroups(identity, groups);
-
-            // A new claim has no destinations yet; the same rules as at authorization give them.
-            identity.SetDestinations(Destinations);
+            return;
         }
+
+        principal.RemoveClaims(GroupsClaim);
+        SetGroups(principal.Identities.First(), groups);
+
+        // A new claim has no destinations yet; the same rules as at authorization give them.
+        principal.SetDestinations(Destinations);
     }
 
     /// <summary>The groups as one claim holding a JSON array, which OpenIddict writes as a list even for one group.</summary>

@@ -93,6 +93,30 @@ public sealed class SignInFileSourceTests : IDisposable
     }
 
     [Fact]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public async Task A_passing_read_error_ends_without_a_change_to_the_file()
+    {
+        Assert.SkipWhen(OperatingSystem.IsWindows(), "File modes are a Unix feature.");
+        var source = await SourceWith(TwoPeople);
+        var stamp = File.GetLastWriteTimeUtc(FilePath);
+
+        // Unreadable without a change of time or size, as a lock held by another process would make it.
+        File.SetUnixFileMode(FilePath, UnixFileMode.None);
+        try
+        {
+            Assert.SkipWhen(CanRead(FilePath), "This user can read any file.");
+            await Assert.ThrowsAsync<InvalidOperationException>(async () => await source.LookUpAsync("bob@example.com", Cancel));
+        }
+        finally
+        {
+            File.SetUnixFileMode(FilePath, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
+
+        Assert.Equal(stamp, File.GetLastWriteTimeUtc(FilePath));
+        Assert.True((await source.LookUpAsync("bob@example.com", Cancel)).MaySignIn);
+    }
+
+    [Fact]
     public async Task A_file_removed_while_running_lets_nobody_in()
     {
         var source = await SourceWith(TwoPeople);
@@ -105,6 +129,7 @@ public sealed class SignInFileSourceTests : IDisposable
 
     [Theory]
     [InlineData("""{ "people": [ { "email": "ann@example.com" } """, "does not have the expected format")]
+    [InlineData("""null""", "\"people\"")]
     [InlineData("""{ }""", "\"people\"")]
     [InlineData("""{ "people": null }""", "\"people\"")]
     [InlineData("""[]""", "does not have the expected format")]
@@ -148,6 +173,19 @@ public sealed class SignInFileSourceTests : IDisposable
         var unset = SignInFileCheck.Check(new MagicLinkSignInFileOptions { Path = " " });
         Assert.True(unset.Failed);
         Assert.Contains("MagicLinkSignInFileOptions.Path", unset.FailureMessage, StringComparison.Ordinal);
+    }
+
+    private static bool CanRead(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return true;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
+        }
     }
 
     private async Task<SignInFileSource> SourceWith(string json)
