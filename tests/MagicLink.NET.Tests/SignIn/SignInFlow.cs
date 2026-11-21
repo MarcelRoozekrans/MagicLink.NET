@@ -48,14 +48,16 @@ internal static class SignInFlow
     public static async Task<SignInMessage> StartAsync(this SignInHosts hosts, Browser browser, HttpResponseMessage emailForm, string email = SignInHosts.Person)
     {
         var form = await HtmlForm.ReadAsync(emailForm);
-        var sent = hosts.Mailbox.Count;
+        var queued = hosts.Queued;
 
         using var response = await form.SubmitAsync(browser, ("email", email));
 
         Assert.Equal(HttpStatusCode.SeeOther, response.StatusCode);
         Assert.Equal("/signin/code", response.Headers.Location!.OriginalString);
-        Assert.Equal(sent + 1, hosts.Mailbox.Count);
-        return hosts.Mailbox[sent];
+        Assert.Equal(queued + 1, hosts.Queued);
+
+        // Each test waits for its own email, so every email queued before this one has arrived already.
+        return await hosts.Mailbox.WaitForAsync(queued);
     }
 
     /// <summary>Opens the code page and types <paramref name="code"/>; returns the answer to that form.</summary>

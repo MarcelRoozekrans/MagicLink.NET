@@ -249,11 +249,11 @@ public sealed class SignInPageTests(SignInHosts hosts) : IClassFixture<SignInHos
             form = await HtmlForm.ReadAsync(emailForm);
         }
 
-        var sent = hosts.Mailbox.Count;
+        var queued = hosts.Queued;
         using var response = await new HtmlForm(new Uri(evil, form.Action.PathAndQuery), form.Hidden).SubmitAsync(browser, ("email", SignInHosts.Person));
 
         Assert.Equal(HttpStatusCode.SeeOther, response.StatusCode);
-        Assert.Equal(SignInHosts.MagicLink.Host, hosts.Mailbox[sent].Link.Host);
+        Assert.Equal(SignInHosts.MagicLink.Host, (await hosts.Mailbox.WaitForAsync(queued)).Link.Host);
     }
 
     [Theory]
@@ -269,12 +269,12 @@ public sealed class SignInPageTests(SignInHosts hosts) : IClassFixture<SignInHos
             form = await HtmlForm.ReadAsync(emailForm);
         }
 
-        var sent = hosts.Mailbox.Count;
+        var queued = hosts.Queued;
         using var response = await form.SubmitAsync(browser, ("email", email));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("valid email address", await response.Content.ReadAsStringAsync(Cancel), StringComparison.Ordinal);
-        Assert.Equal(sent, hosts.Mailbox.Count);
+        Assert.Equal(queued, hosts.Queued);
     }
 
     [Theory]
@@ -312,11 +312,11 @@ public sealed class SignInPageTests(SignInHosts hosts) : IClassFixture<SignInHos
         }
 
         var hidden = form.Hidden.Select(static field => string.Equals(field.Key, "ReturnUrl", StringComparison.Ordinal) ? KeyValuePair.Create(field.Key, "//evil.example/") : field).ToList();
-        var sent = hosts.Mailbox.Count;
+        var queued = hosts.Queued;
         using var response = await new HtmlForm(form.Action, hidden).SubmitAsync(browser, ("email", SignInHosts.Person));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Equal(sent, hosts.Mailbox.Count);
+        Assert.Equal(queued, hosts.Queued);
     }
 
     [Fact]
@@ -366,8 +366,11 @@ public sealed class SignInPageTests(SignInHosts hosts) : IClassFixture<SignInHos
             form = await HtmlForm.ReadAsync(emailForm);
         }
 
+        var queued = hosts.Queued;
         using var response = await form.SubmitAsync(browser, ("email", SignInHosts.Person));
 
+        // The next test expects every earlier email to have arrived, so this one is waited for too.
+        await hosts.Mailbox.WaitForAsync(queued);
         var cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"), static value => value.StartsWith("__Host-MagicLink.SignIn=", StringComparison.Ordinal));
         Assert.Contains("; secure", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("; httponly", cookie, StringComparison.OrdinalIgnoreCase);

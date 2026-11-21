@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
 using OpenIddict.Server;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
@@ -72,11 +73,28 @@ internal static class MagicLinkServer
             .Validate(static options => options.MaxCodeAttempts > 0, "MagicLinkOptions.MaxCodeAttempts must be at least 1.")
             .ValidateOnStart();
 
-        // The sign-in page: its forms carry antiforgery tokens, and its message goes to the mail sender (issue #6).
+        // The sign-in page: its forms carry antiforgery tokens, and its email goes out in the background (issue #6).
         builder.Services.AddAntiforgery();
-        builder.Services.TryAddSingleton<ISignInMessageSender, UnsentSignInMessages>();
         builder.Services.TryAddSingleton(TimeProvider.System);
+        AddSignInMail(builder.Services);
 
         return builder;
+    }
+
+    /// <summary>
+    /// The sign-in email goes to a queue in the process that a background service sends from, with retries (ADR-015).
+    /// SMTP is the default sender; another registration of <see cref="ISignInMessageSender"/> replaces it, before or
+    /// after this call.
+    /// </summary>
+    private static void AddSignInMail(IServiceCollection services)
+    {
+        services.TryAddSingleton<SignInMailQueue>();
+        services.AddSignInMailDeliveryResiliencePolicies();
+        services.AddHostedService<SignInMailWorker>();
+        services.TryAddSingleton<ISignInMessageSender, SmtpSignInMessageSender>();
+
+        // Checked at start with the other settings, but only while SMTP is the sender in use.
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<MagicLinkSmtpOptions>, SmtpSettingsCheck>());
+        services.AddOptions<MagicLinkSmtpOptions>().ValidateOnStart();
     }
 }
