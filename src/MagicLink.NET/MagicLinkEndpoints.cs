@@ -23,13 +23,14 @@ internal static class MagicLinkEndpoints
     public const string TokenPath = "connect/token";
     public const string UserInfoPath = "connect/userinfo";
 
-    /// <summary>Maps the authorization and token endpoints.</summary>
+    /// <summary>Maps the authorization and token endpoints, and the sign-in page.</summary>
     public static IEndpointRouteBuilder MapMagicLinkEndpoints(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
 
         endpoints.MapMethods("/" + AuthorizationPath, [HttpMethods.Get, HttpMethods.Post], new RequestDelegate(AuthorizeAsync));
         endpoints.MapPost("/" + TokenPath, new RequestDelegate(TokenAsync));
+        endpoints.MapSignInPage();
         return endpoints;
     }
 
@@ -46,7 +47,7 @@ internal static class MagicLinkEndpoints
         var email = session.Succeeded ? session.Principal.FindFirst(Claims.Email)?.Value : null;
         var signedInAt = session.Properties?.IssuedUtc;
 
-        if (email is null || signedInAt is null || MustSignInAgain(request, signedInAt.Value, context.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System))
+        if (email is null || signedInAt is null || MustSignInAgain(request, signedInAt.Value, context.RequestServices.GetRequiredService<TimeProvider>()))
         {
             if (request.HasPromptValue(PromptValues.None))
             {

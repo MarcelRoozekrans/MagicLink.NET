@@ -19,7 +19,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
     {
         var browser = hosts.NewBrowser();
 
-        using var response = await browser.NavigateAsync(AppMe);
+        using var response = await hosts.SignInAsync(browser, AppMe);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Contains(browser.Visited, static uri => string.Equals(uri.Host, SignInHosts.MagicLink.Host, StringComparison.Ordinal) && string.Equals(uri.AbsolutePath, "/signin", StringComparison.Ordinal));
@@ -42,25 +42,30 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
     public async Task A_person_with_a_session_signs_in_to_an_application_without_signing_in_again()
     {
         var browser = hosts.NewBrowser();
-        (await browser.NavigateAsync(AppMe)).Dispose();
+        (await hosts.SignInAsync(browser, AppMe)).Dispose();
         browser.ForgetCookiesOf(SignInHosts.App);
-        var visits = hosts.SignInPageVisits;
+        var sent = hosts.Mailbox.Count;
 
         using var response = await browser.NavigateAsync(AppMe);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(visits, hosts.SignInPageVisits);
+        Assert.Equal(sent, hosts.Mailbox.Count);
     }
 
     [Fact]
     public async Task The_session_cookie_is_secure_http_only_and_lax()
     {
         var browser = hosts.NewBrowser();
-        var (_, _, challenge) = NewAuthorization();
+        var (authorize, _, _) = NewAuthorization();
+        SignInMessage message;
+        using (var emailForm = await SignInFlow.OpenEmailFormAsync(browser, authorize))
+        {
+            message = await hosts.StartAsync(browser, emailForm);
+        }
 
-        using var signInPage = await browser.NavigateAsync(new Uri(SignInHosts.MagicLink, "/signin?ReturnUrl=" + Uri.EscapeDataString(challenge)), stopAtHost: SignInHosts.MagicLink.Host);
+        using var confirmed = await SignInFlow.TypeCodeAsync(browser, message.Code);
 
-        var cookie = Assert.Single(signInPage.Headers.GetValues("Set-Cookie"), static value => value.StartsWith(MagicLinkSession.CookieName + "=", StringComparison.Ordinal));
+        var cookie = Assert.Single(confirmed.Headers.GetValues("Set-Cookie"), static value => value.StartsWith(MagicLinkSession.CookieName + "=", StringComparison.Ordinal));
         Assert.Contains("; secure", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("; httponly", cookie, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("; samesite=lax", cookie, StringComparison.OrdinalIgnoreCase);
@@ -104,7 +109,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         var browser = hosts.NewBrowser();
         var (authorize, verifier, _) = NewAuthorization();
 
-        var code = await CodeFrom(await browser.NavigateAsync(authorize, stopAtHost: SignInHosts.App.Host));
+        var code = await CodeFrom(await hosts.SignInAsync(browser, authorize, stopAtHost: SignInHosts.App.Host));
         using var tokens = await RedeemAsync(browser, code, verifier);
 
         using var idToken = Payload(tokens.RootElement.GetProperty("id_token").GetString()!);
@@ -128,7 +133,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         var browser = hosts.NewBrowser();
         var (authorize, verifier, _) = NewAuthorization(scope: "openid");
 
-        var code = await CodeFrom(await browser.NavigateAsync(authorize, stopAtHost: SignInHosts.App.Host));
+        var code = await CodeFrom(await hosts.SignInAsync(browser, authorize, stopAtHost: SignInHosts.App.Host));
         using var tokens = await RedeemAsync(browser, code, verifier);
 
         using var idToken = Payload(tokens.RootElement.GetProperty("id_token").GetString()!);
@@ -143,7 +148,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
     {
         var browser = hosts.NewBrowser();
         var (authorize, verifier, _) = NewAuthorization();
-        var code = await CodeFrom(await browser.NavigateAsync(authorize, stopAtHost: SignInHosts.App.Host));
+        var code = await CodeFrom(await hosts.SignInAsync(browser, authorize, stopAtHost: SignInHosts.App.Host));
         (await RedeemAsync(browser, code, verifier)).Dispose();
 
         using var second = await PostTokenAsync(browser, code, verifier);
@@ -158,7 +163,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
     {
         var browser = hosts.NewBrowser();
         var (authorize, _, _) = NewAuthorization();
-        var code = await CodeFrom(await browser.NavigateAsync(authorize, stopAtHost: SignInHosts.App.Host));
+        var code = await CodeFrom(await hosts.SignInAsync(browser, authorize, stopAtHost: SignInHosts.App.Host));
 
         using var response = await PostTokenAsync(browser, code, NewAuthorization().Verifier);
 
@@ -171,7 +176,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         var browser = hosts.NewBrowser();
         var (authorize, _, _) = NewAuthorization(extra: "&prompt=none");
 
-        using var response = await browser.NavigateAsync(authorize, stopAtHost: SignInHosts.App.Host);
+        using var response = await hosts.SignInAsync(browser, authorize, stopAtHost: SignInHosts.App.Host);
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var callback = response.Headers.Location!;
@@ -184,7 +189,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
     public async Task Prompt_none_with_a_session_returns_a_code()
     {
         var browser = hosts.NewBrowser();
-        (await browser.NavigateAsync(AppMe)).Dispose();
+        (await hosts.SignInAsync(browser, AppMe)).Dispose();
         var (authorize, _, _) = NewAuthorization(extra: "&prompt=none");
 
         await CodeFrom(await browser.NavigateAsync(authorize, stopAtHost: SignInHosts.App.Host));
@@ -196,7 +201,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
     public async Task An_application_can_ask_a_signed_in_person_to_sign_in_again(string extra)
     {
         var browser = hosts.NewBrowser();
-        (await browser.NavigateAsync(AppMe)).Dispose();
+        (await hosts.SignInAsync(browser, AppMe)).Dispose();
         var (authorize, _, _) = NewAuthorization(extra: extra);
 
         using var first = await browser.SendAsync(new HttpRequestMessage(HttpMethod.Get, authorize));
@@ -208,7 +213,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         var returnUrl = QueryHelpers.ParseQuery(signIn.Query)["ReturnUrl"].ToString();
         Assert.DoesNotContain(extra[1..], returnUrl, StringComparison.Ordinal);
         Assert.Contains("code_challenge=", returnUrl, StringComparison.Ordinal);
-        await CodeFrom(await browser.NavigateAsync(signIn, stopAtHost: SignInHosts.App.Host));
+        await CodeFrom(await hosts.SignInAsync(browser, signIn, stopAtHost: SignInHosts.App.Host));
     }
 
     [Fact]
@@ -231,13 +236,13 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
     public async Task A_recent_session_meets_max_age(string maxAge)
     {
         var browser = hosts.NewBrowser();
-        (await browser.NavigateAsync(AppMe)).Dispose();
-        var visits = hosts.SignInPageVisits;
+        (await hosts.SignInAsync(browser, AppMe)).Dispose();
+        var sent = hosts.Mailbox.Count;
         var (authorize, _, _) = NewAuthorization(extra: "&max_age=" + maxAge);
 
         await CodeFrom(await browser.NavigateAsync(authorize, stopAtHost: SignInHosts.App.Host));
 
-        Assert.Equal(visits, hosts.SignInPageVisits);
+        Assert.Equal(sent, hosts.Mailbox.Count);
     }
 
     [Fact]
@@ -255,7 +260,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var signIn = new Uri(authorize, response.Headers.Location!);
         var returnUrl = QueryHelpers.ParseQuery(signIn.Query)["ReturnUrl"].ToString();
-        await CodeFrom(await browser.NavigateAsync(new Uri(SignInHosts.MagicLink, returnUrl), stopAtHost: SignInHosts.App.Host));
+        await CodeFrom(await hosts.SignInAsync(browser, new Uri(SignInHosts.MagicLink, returnUrl), stopAtHost: SignInHosts.App.Host));
     }
 
     [Fact]

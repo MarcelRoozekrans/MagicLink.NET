@@ -19,14 +19,13 @@ namespace MagicLink.Tests.SignIn;
 /// Core's own OpenID Connect handler, so it speaks OIDC as any application would.
 /// </summary>
 /// <remarks>
-/// The sign-in page, where a person confirms the link or the code, comes with issue #4. Until then a stand-in at its
-/// address starts the session for <see cref="Person"/> at once, the way the page will after a confirmation.
+/// Sending the email is issue #6; until then <see cref="Mailbox"/> catches the link and code the page would mail.
 /// </remarks>
 public sealed class SignInHosts : IAsyncLifetime
 {
     public const string ClientId = "test-app";
 
-    /// <summary>The person the stand-in sign-in page signs in, written as a person might type it.</summary>
+    /// <summary>The person who signs in, written as a person might type it.</summary>
     public const string Person = " Person@Example.com ";
 
     /// <summary>The same address as MagicLink.NET keeps it.</summary>
@@ -43,18 +42,43 @@ public sealed class SignInHosts : IAsyncLifetime
     private WebApplication? _magicLink;
     private WebApplication? _app;
 
-    /// <summary>How often the stand-in sign-in page was opened.</summary>
-    public int SignInPageVisits { get; private set; }
+    /// <summary>The sign-in emails MagicLink.NET would have sent.</summary>
+    internal Mailbox Mailbox { get; } = new();
+
+    /// <summary>MagicLink.NET's clock, which a test can move forward.</summary>
+    internal TestClock Clock { get; } = new();
+
+    /// <summary>MagicLink.NET's services, to put a sign-in request in the store as only a damaged store would hold it.</summary>
+    internal IServiceProvider MagicLinkServices
+    {
+        get
+        {
+            _ = _database.ConnectionString; // Skips, or fails in CI, without a database.
+            return _magicLink!.Services;
+        }
+    }
 
     /// <summary>A fresh browser, without cookies, that can reach both hosts.</summary>
-    public Browser NewBrowser()
+    public Browser NewBrowser() => NewBrowser(alias: null);
+
+    /// <summary>
+    /// A fresh browser that also reaches MagicLink.NET under <paramref name="alias"/>, as a request with a forged Host
+    /// header would.
+    /// </summary>
+    public Browser NewBrowser(string? alias)
     {
         _ = _database.ConnectionString; // Skips, or fails in CI, without a database.
-        return new Browser(new Dictionary<string, HttpMessageHandler>(StringComparer.Ordinal)
+        var hosts = new Dictionary<string, HttpMessageHandler>(StringComparer.Ordinal)
         {
             [MagicLink.Host] = _magicLink!.GetTestServer().CreateHandler(),
             [App.Host] = _app!.GetTestServer().CreateHandler(),
-        });
+        };
+        if (alias is not null)
+        {
+            hosts[alias] = hosts[MagicLink.Host];
+        }
+
+        return new Browser(hosts);
     }
 
     public async ValueTask InitializeAsync()
@@ -95,55 +119,14 @@ public sealed class SignInHosts : IAsyncLifetime
 
         builder.Services.AddOpenIddict()
             .AddCore(options => options.UsePostgreSql(store => store.ConnectionString = connectionString))
-            .AddMagicLinkServer(server => server.AddEphemeralEncryptionKey().AddEphemeralSigningKey());
+            .AddMagicLinkServer(server => server.SetIssuer(MagicLink).AddEphemeralEncryptionKey().AddEphemeralSigningKey());
+        builder.Services.AddSingleton<ISignInMessageSender>(Mailbox);
+        builder.Services.AddSingleton<TimeProvider>(Clock);
 
         var app = builder.Build();
         app.UseAuthentication();
         app.MapMagicLinkEndpoints();
-        app.MapGet(MagicLinkSession.SignInPath, new RequestDelegate(StandInSignInPageAsync));
         return app;
-    }
-
-    /// <summary>Starts the session and returns to the authorization request, as the page of issue #4 will.</summary>
-    private async Task StandInSignInPageAsync(HttpContext context)
-    {
-        SignInPageVisits++;
-        var returnUrl = context.Request.Query["ReturnUrl"].ToString();
-        if (!IsLocalUrl(returnUrl))
-        {
-            context.Response.StatusCode = StatusCodes.Status400BadRequest;
-            return;
-        }
-
-        await MagicLinkSession.SignInAsync(context, Person);
-        await Results.LocalRedirect(returnUrl).ExecuteAsync(context);
-    }
-
-    /// <summary>
-    /// True for a path on this site only. Browsers read <c>//host</c> and <c>/\host</c> as another site, so a second
-    /// character of <c>/</c> or <c>\</c> is refused, as are control characters, which browsers strip.
-    /// </summary>
-    internal static bool IsLocalUrl(string url)
-    {
-        if (url.Length == 0 || url[0] != '/')
-        {
-            return false;
-        }
-
-        if (url.Length > 1 && url[1] is '/' or '\\')
-        {
-            return false;
-        }
-
-        foreach (var character in url)
-        {
-            if (char.IsControl(character))
-            {
-                return false;
-            }
-        }
-
-        return true;
     }
 
     private static async Task RegisterClientAsync(IServiceProvider services)
