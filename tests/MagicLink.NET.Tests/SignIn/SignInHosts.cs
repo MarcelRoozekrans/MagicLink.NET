@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using OpenIddict.Abstractions;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
@@ -68,6 +69,9 @@ public sealed class SignInHosts : IAsyncLifetime
     /// <see cref="Mailbox"/>, which the email reaches later, this shows straight after an answer whether an email was asked for.
     /// </summary>
     internal int Queued => MagicLinkServices.GetRequiredService<SignInMailQueue>().Queued;
+
+    /// <summary>What MagicLink.NET logged.</summary>
+    internal ListLoggerProvider Logs { get; } = new();
 
     /// <summary>MagicLink.NET's clock, which a test can move forward.</summary>
     internal TestClock Clock { get; } = new();
@@ -174,6 +178,7 @@ public sealed class SignInHosts : IAsyncLifetime
         builder.Services.AddMagicLinkSignInFile(options => options.Path = PeopleFile);
         builder.Services.AddSingleton<ISignInMessageSender>(Mailbox);
         builder.Services.AddSingleton<TimeProvider>(Clock);
+        builder.Logging.AddProvider(Logs);
 
         var app = builder.Build();
         app.UseAuthentication();
