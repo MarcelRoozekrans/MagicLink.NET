@@ -25,3 +25,4 @@ ADR numbers run across a whole product line, so numbers missing here belong to d
 * [ADR-015: Send sign-in email through a pluggable sender, SMTP by default](adr/0015-send-sign-in-email-through-a-pluggable-sender-smtp-by-default.md)
 * [ADR-016: Aim for Native AOT, with an own store on PostgreSQL](adr/0016-aim-for-native-aot-with-an-own-store-on-postgresql.md)
 * [ADR-219: License MagicLink.NET under MIT](adr/0219-license-magiclink-net-under-mit.md)
+* [ADR-249: Confirm the sign-in link only in the browser that started the sign-in](adr/0249-confirm-the-sign-in-link-only-in-the-browser-that-started-the-sign-in.md)
