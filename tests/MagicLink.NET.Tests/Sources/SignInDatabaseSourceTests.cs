@@ -50,9 +50,10 @@ public abstract class SignInDatabaseSourceTests<TDatabase>(TDatabase database) :
     }
 
     [Fact]
-    public async Task A_query_that_writes_leaves_nothing_behind()
+    public async Task A_write_the_query_makes_is_rolled_back()
     {
-        // Run as the owner, who may write: MagicLink.NET itself must still never change the database.
+        // Run as the owner, who may write. The account that may only read is what keeps the database unchanged; the
+        // rollback cleans up after a query that writes all the same.
         await using var source = Source(database.WritingQuery, database.AdminConnectionString);
 
         var access = await source.LookUpAsync("ann@example.com", Cancel);
@@ -70,6 +71,32 @@ public abstract class SignInDatabaseSourceTests<TDatabase>(TDatabase database) :
     }
 
     [Fact]
+    public async Task A_query_that_fails_after_its_rows_lets_nobody_in()
+    {
+        await using var source = Source(database.FailingAfterItsRowsQuery);
+
+        await Assert.ThrowsAnyAsync<System.Data.Common.DbException>(async () => await source.LookUpAsync("ann@example.com", Cancel));
+    }
+
+    [Fact]
+    public async Task A_query_that_returns_more_than_one_result_lets_nobody_in()
+    {
+        await using var source = Source("SELECT group_name FROM memberships WHERE email = @email; SELECT group_name FROM memberships");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(async () => await source.LookUpAsync("ann@example.com", Cancel));
+        Assert.Contains("one result", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void The_start_check_refuses_a_query_that_fails_after_its_rows()
+    {
+        var result = Check(database.FailingAfterItsRowsQuery);
+
+        Assert.True(result.Failed);
+        Assert.Contains("MagicLinkSignInDatabaseOptions.Query", result.FailureMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void The_start_check_passes_a_query_that_works_for_an_account_that_may_only_read()
     {
         var result = Check(GroupsQuery);
@@ -83,6 +110,7 @@ public abstract class SignInDatabaseSourceTests<TDatabase>(TDatabase database) :
     [InlineData("SELECT email, group_name FROM memberships WHERE email = @email", "one column")]
     [InlineData("SELECT id FROM people WHERE email = @email", "text")]
     [InlineData("SELECT group_name FROM memberships", "lets the made-up address")]
+    [InlineData("SELECT group_name FROM memberships WHERE email = @email; SELECT group_name FROM memberships WHERE email = @email", "one result")]
     public void The_start_check_refuses_a_query_that_fails_and_says_why(string query, string reason)
     {
         var result = Check(query);

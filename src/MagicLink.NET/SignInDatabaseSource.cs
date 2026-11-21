@@ -6,13 +6,18 @@ namespace MagicLink;
 
 /// <summary>
 /// Who may sign in and with which groups, from an existing PostgreSQL or SQL Server database (ADR-014); see
-/// <see cref="MagicLinkSignInDatabaseOptions"/>. Each look-up runs the query in a transaction that is always rolled back, so
-/// MagicLink.NET never changes this database. When the database cannot answer, a look-up throws and nobody signs in.
+/// <see cref="MagicLinkSignInDatabaseOptions"/>. MagicLink.NET only reads from this database; that it cannot change it
+/// rests on the account having read permission only. Each look-up runs the query to its end in a transaction that is
+/// always rolled back, which cleans up after a query that writes by mistake. When the database cannot answer, or the
+/// query fails in any of its statements, a look-up throws and nobody signs in.
 /// </summary>
 internal sealed class SignInDatabaseSource(IOptions<MagicLinkSignInDatabaseOptions> options, SignInDatabaseProvider provider) : ISignInSource, IAsyncDisposable, IDisposable
 {
     /// <summary>The parameter the query gets the email address in.</summary>
     internal const string EmailParameter = "@email";
+
+    /// <summary>Why a query that returns a second result is refused.</summary>
+    internal const string MoreThanOneResult = "The query of who may sign in, MagicLinkSignInDatabaseOptions.Query, returns more than one result, but must return one result: the groups of the address.";
 
     // Created on the first look-up, not in the constructor: the start check of these options looks this source up.
     private readonly Lazy<DbDataSource> _dataSource = new(() => provider.Factory.CreateDataSource(options.Value.ConnectionString!));
@@ -42,6 +47,13 @@ internal sealed class SignInDatabaseSource(IOptions<MagicLinkSignInDatabaseOptio
                             {
                                 (groups ??= []).Add(Group(reader.GetString(0)));
                             }
+                        }
+
+                        // Run the query to its end: an error in a later statement must keep everyone out, not be lost
+                        // when the reader closes.
+                        if (await reader.NextResultAsync(cancellationToken).ConfigureAwait(false))
+                        {
+                            throw new InvalidOperationException(MoreThanOneResult);
                         }
                     }
                 }

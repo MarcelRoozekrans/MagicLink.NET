@@ -11,6 +11,8 @@ public sealed class PostgreSqlUserDatabase : UserDatabase
 
     public override string WritingQuery => "INSERT INTO notes (note) VALUES (@email) RETURNING note";
 
+    public override string FailingAfterItsRowsQuery => "SELECT group_name FROM memberships WHERE email = @email; SELECT 1 / 0";
+
     protected override string[] CreateDatabaseSql() =>
         [
             $"CREATE DATABASE {DatabaseName}",

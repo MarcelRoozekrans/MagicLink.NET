@@ -52,7 +52,10 @@ internal sealed class SignInDatabaseCheck(IServiceProvider services) : IValidate
         }
     }
 
-    /// <summary>Runs the query for the made-up address in a transaction that is rolled back; returns what is wrong, if anything.</summary>
+    /// <summary>
+    /// Runs the query for the made-up address to its end, in a transaction that is rolled back; returns what is wrong,
+    /// if anything.
+    /// </summary>
     private static string? Run(DbProviderFactory factory, string connectionString, string query)
     {
         using var dataSource = factory.CreateDataSource(connectionString);
@@ -69,6 +72,16 @@ internal sealed class SignInDatabaseCheck(IServiceProvider services) : IValidate
                     : reader.Read()
                         ? $"it lets the made-up address {MadeUpAddress} sign in, so it would let anyone in. It must look up the address in {SignInDatabaseSource.EmailParameter}."
                         : null;
+
+            // Run the query to its end, as a look-up does, so an error in a later statement shows here too.
+            while (reader.Read())
+            {
+            }
+
+            if (reader.NextResult())
+            {
+                problem ??= "it returns more than one result, but must return one result: the groups of the address.";
+            }
         }
 
         transaction.Rollback();

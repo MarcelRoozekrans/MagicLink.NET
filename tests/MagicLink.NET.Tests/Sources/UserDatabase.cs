@@ -31,6 +31,9 @@ public abstract class UserDatabase : IAsyncLifetime
     /// <summary>A query that writes a note for the address and returns it.</summary>
     public abstract string WritingQuery { get; }
 
+    /// <summary>A query that returns the groups of the address, and then fails in a later statement.</summary>
+    public abstract string FailingAfterItsRowsQuery { get; }
+
     /// <summary>The connection string of the account that owns this database and may write to it.</summary>
     public string AdminConnectionString => _adminConnectionString ?? Skip();
 
@@ -55,16 +58,25 @@ public abstract class UserDatabase : IAsyncLifetime
             return;
         }
 
-        foreach (var statement in CreateDatabaseSql())
+        try
         {
-            await RunAsync(Server, statement);
-        }
+            foreach (var statement in CreateDatabaseSql())
+            {
+                await RunAsync(Server, statement);
+            }
 
-        var admin = ConnectionStringFor(Server, DatabaseName, user: null, password: null);
-        await RunAsync(admin, Schema);
-        await RunAsync(admin, CreateReaderSql());
-        _adminConnectionString = admin;
-        _readerConnectionString = ConnectionStringFor(Server, DatabaseName, ReaderName, ReaderPassword);
+            var admin = ConnectionStringFor(Server, DatabaseName, user: null, password: null);
+            await RunAsync(admin, Schema);
+            await RunAsync(admin, CreateReaderSql());
+            _adminConnectionString = admin;
+            _readerConnectionString = ConnectionStringFor(Server, DatabaseName, ReaderName, ReaderPassword);
+        }
+        catch
+        {
+            // Drops whatever was created before the failure; the drops skip what does not exist.
+            await DropAsync();
+            throw;
+        }
     }
 
     public async ValueTask DisposeAsync()
@@ -74,11 +86,7 @@ public abstract class UserDatabase : IAsyncLifetime
             return;
         }
 
-        ClearPools();
-        foreach (var statement in DropSql())
-        {
-            await RunAsync(Server!, statement);
-        }
+        await DropAsync();
 
         GC.SuppressFinalize(this);
     }
@@ -103,12 +111,21 @@ public abstract class UserDatabase : IAsyncLifetime
     /// <summary>Creates the account that may only read, run on this class's database as its owner.</summary>
     protected abstract string CreateReaderSql();
 
-    /// <summary>Drops the database and the account, each statement on its own.</summary>
+    /// <summary>Drops the database and the account, each statement on its own, skipping either when it does not exist.</summary>
     protected abstract string[] DropSql();
 
     protected abstract string ConnectionStringFor(string server, string database, string? user, string? password);
 
     protected abstract void ClearPools();
+
+    private async Task DropAsync()
+    {
+        ClearPools();
+        foreach (var statement in DropSql())
+        {
+            await RunAsync(Server!, statement);
+        }
+    }
 
     private async Task RunAsync(string connectionString, string sql)
     {

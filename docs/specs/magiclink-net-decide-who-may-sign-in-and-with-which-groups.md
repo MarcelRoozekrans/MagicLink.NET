@@ -38,8 +38,8 @@ MagicLink.NET looks up whether an email address may sign in and which groups the
 
 ## Decided while building
 
-* The query of the database source gets the address as the parameter `@email` and returns one text column, a row per group. A row whose group is `NULL` lets the person in without that group; no row means the address may not sign in. MagicLink.NET runs it in a transaction it always rolls back, so not even a query that writes changes the database. Issue #8.
-* The startup check of criterion 4 also refuses a query that returns other than one text column, or that lets the made-up address in: such a query ignores `@email` and would let anyone sign in. Issue #8.
+* The query of the database source gets the address as the parameter `@email` and returns one text column, a row per group. A row whose group is `NULL` lets the person in without that group; no row means the address may not sign in. The account it runs as may only read; that is what keeps the database unchanged. MagicLink.NET also runs the query in a transaction it always rolls back, which cleans up after a query that writes by mistake but cannot undo a COMMIT inside the query. An error in any statement of the query keeps everyone out. Issue #8.
+* The startup check of criterion 4 also refuses a query that returns other than one text column or more than one result, and one that lets the made-up address in: that query ignores `@email` and would let anyone sign in. Issue #8.
 
 ## Tasks
 

@@ -14,9 +14,12 @@ namespace MagicLink;
 /// FROM people p LEFT JOIN memberships m ON m.person_id = p.id
 /// WHERE lower(p.email) = @email
 /// </code>
-/// MagicLink.NET runs the query in a transaction that it always rolls back, so not even a query that writes changes the
-/// database; give it an account that may only read all the same. At startup it runs the query once with a made-up
-/// address, and refuses to start when that fails, returns other than one text column, or lets the made-up address in.
+/// Give MagicLink.NET an account that may only read: MagicLink.NET never writes to this database, and the account's
+/// permissions are what keep a mistaken query from changing it. Each look-up runs the query in a transaction that is
+/// always rolled back, which cleans up after such a query but cannot undo everything, such as a COMMIT in the query
+/// itself or a sequence it advances. The query must return one result; an error in any of its statements keeps everyone
+/// out. At startup MagicLink.NET runs the query once with a made-up address, and refuses to start when that fails,
+/// returns other than one text column or more than one result, or lets the made-up address in.
 /// </remarks>
 public sealed class MagicLinkSignInDatabaseOptions
 {

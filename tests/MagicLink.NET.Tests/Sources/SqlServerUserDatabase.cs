@@ -11,6 +11,8 @@ public sealed class SqlServerUserDatabase : UserDatabase
 
     public override string WritingQuery => "INSERT INTO notes (note) OUTPUT inserted.note VALUES (@email)";
 
+    public override string FailingAfterItsRowsQuery => "SELECT group_name FROM memberships WHERE email = @email; RAISERROR(N'lookup failed', 16, 1)";
+
     protected override string[] CreateDatabaseSql() =>
         [
             $"CREATE DATABASE {DatabaseName}",
@@ -24,9 +26,9 @@ public sealed class SqlServerUserDatabase : UserDatabase
 
     protected override string[] DropSql() =>
         [
-            $"ALTER DATABASE {DatabaseName} SET SINGLE_USER WITH ROLLBACK IMMEDIATE",
-            $"DROP DATABASE {DatabaseName}",
-            $"DROP LOGIN {ReaderName}",
+            $"IF DB_ID('{DatabaseName}') IS NOT NULL ALTER DATABASE {DatabaseName} SET SINGLE_USER WITH ROLLBACK IMMEDIATE",
+            $"DROP DATABASE IF EXISTS {DatabaseName}",
+            $"IF SUSER_ID('{ReaderName}') IS NOT NULL DROP LOGIN {ReaderName}",
         ];
 
     protected override string ConnectionStringFor(string server, string database, string? user, string? password)
@@ -34,6 +36,8 @@ public sealed class SqlServerUserDatabase : UserDatabase
         var builder = new Microsoft.Data.SqlClient.SqlConnectionStringBuilder(server) { InitialCatalog = database };
         if (user is not null)
         {
+            // The reader signs in with its own login, also when the server's connection string uses Windows sign-in.
+            builder.IntegratedSecurity = false;
             builder.UserID = user;
             builder.Password = password;
         }
