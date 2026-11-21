@@ -13,6 +13,8 @@
     <!-- An OpenID Connect client application, and both apps in memory. -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+    <!-- The user database of who may sign in, on SQL Server; PostgreSQL comes with the store's reference. -->
+    <PackageReference Include="Microsoft.Data.SqlClient" />
   </ItemGroup>
   <!-- A database of its own per test class, as the store's tests have. -->
   <ItemGroup>

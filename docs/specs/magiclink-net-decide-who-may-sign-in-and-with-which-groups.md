@@ -36,6 +36,11 @@ MagicLink.NET looks up whether an email address may sign in and which groups the
 
 * *Should MagicLink.NET fetch the file from a git repository itself?* The first version reads the file from a path: a checkout of the repository, or a file mounted from it, such as a Kubernetes ConfigMap that a GitOps tool keeps up to date. It reads the file again when it changes, so a new commit applies without a restart. Cloning and pulling a repository would need credentials for it and a git client in the process. Written down while building issue #7.
 
+## Decided while building
+
+* The query of the database source gets the address as the parameter `@email` and returns one text column, a row per group. A row whose group is `NULL` lets the person in without that group; no row means the address may not sign in. MagicLink.NET runs it in a transaction it always rolls back, so not even a query that writes changes the database. Issue #8.
+* The startup check of criterion 4 also refuses a query that returns other than one text column, or that lets the made-up address in: such a query ignores `@email` and would let anyone sign in. Issue #8.
+
 ## Tasks
 
 * https://github.com/MarcelRoozekrans/MagicLink.NET/issues/7
