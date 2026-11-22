@@ -21,9 +21,10 @@ namespace MagicLink.Tests.SignIn;
 /// </summary>
 /// <remarks>
 /// <see cref="Mailbox"/> replaces the SMTP sender and catches the link and code; the emails reach it in the background,
-/// as they would reach a mail server.
+/// as they would reach a mail server. A test class signs the same people in many times, so these hosts allow far more
+/// emails per address than the default; <see cref="DefaultLimitSignInHosts"/> keeps the default.
 /// </remarks>
-public sealed class SignInHosts : IAsyncLifetime
+public class SignInHosts : IAsyncLifetime
 {
     public const string ClientId = "test-app";
 
@@ -76,6 +77,9 @@ public sealed class SignInHosts : IAsyncLifetime
     /// <see cref="Mailbox"/>, which the email reaches later, this shows straight after an answer whether an email was asked for.
     /// </summary>
     internal int Queued => MagicLinkServices.GetRequiredService<SignInMailQueue>().Queued;
+
+    /// <summary>How many sign-in emails an address gets in the window, or null for the default.</summary>
+    protected virtual int? MaxEmailsPerAddress => 1_000;
 
     /// <summary>What MagicLink.NET logged.</summary>
     internal ListLoggerProvider Logs { get; } = new();
@@ -194,6 +198,10 @@ public sealed class SignInHosts : IAsyncLifetime
         builder.Services.AddSingleton<ISignInMessageSender>(Mailbox);
         builder.Services.AddSingleton<TimeProvider>(Clock);
         builder.Logging.AddProvider(Logs);
+        if (MaxEmailsPerAddress is { } maxEmails)
+        {
+            builder.Services.Configure<MagicLinkOptions>(options => options.MaxEmailsPerAddress = maxEmails);
+        }
 
         var app = builder.Build();
         app.UseAuthentication();

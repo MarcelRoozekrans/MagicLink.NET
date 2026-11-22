@@ -21,14 +21,18 @@ public sealed class MagicLinkServerTests
     }
 
     [Theory]
-    [InlineData(0, 5, "CodeLifetime")]
-    [InlineData(10, 0, "MaxCodeAttempts")]
-    public async Task MagicLink_does_not_start_with_settings_that_lock_everyone_out(int lifetimeMinutes, int attempts, string setting)
+    [InlineData(0, 5, 5, 15, "CodeLifetime")]
+    [InlineData(10, 0, 5, 15, "MaxCodeAttempts")]
+    [InlineData(10, 5, 0, 15, "MaxEmailsPerAddress")]
+    [InlineData(10, 5, 5, 0, "EmailLimitWindow")]
+    public async Task MagicLink_does_not_start_with_settings_that_lock_everyone_out(int lifetimeMinutes, int attempts, int emails, int windowMinutes, string setting)
     {
         await using var app = Build(new Uri("https://magiclink.test/"), options =>
         {
             options.CodeLifetime = TimeSpan.FromMinutes(lifetimeMinutes);
             options.MaxCodeAttempts = attempts;
+            options.MaxEmailsPerAddress = emails;
+            options.EmailLimitWindow = TimeSpan.FromMinutes(windowMinutes);
         });
 
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => app.StartAsync(TestContext.Current.CancellationToken));

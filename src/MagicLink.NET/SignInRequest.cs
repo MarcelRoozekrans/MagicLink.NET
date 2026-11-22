@@ -64,12 +64,12 @@ internal sealed class SignInRequest
         CreateAsync(tokens, email, returnUrl, now, lifetime, NewCode(), cancellationToken);
 
     /// <summary>
-    /// Starts a sign-in request for <paramref name="email"/>, an address that may not sign in, and returns it with the
-    /// value of the binding cookie. It is stored and answered like any other request, so nobody can tell from the
-    /// answer, the code page or its timing that the address is unknown. Nobody can confirm it: no email carries its
-    /// link, and its code is a secret far longer than any code, so no typed code matches.
+    /// Starts a sign-in request for <paramref name="email"/> that gets no email: the address may not sign in, or got
+    /// enough emails for now. Returns it with the value of the binding cookie. It is stored and answered like any other
+    /// request, so nobody can tell from the answer, the code page or its timing that no email went out. Nobody can
+    /// confirm it: no email carries its link, and its code is a secret far longer than any code, so no typed code matches.
     /// </summary>
-    public static async ValueTask<(SignInRequest Request, string Cookie)> CreateRefusedAsync(
+    public static async ValueTask<(SignInRequest Request, string Cookie)> CreateWithoutEmailAsync(
         IOpenIddictTokenManager tokens, string email, string returnUrl, DateTimeOffset now, TimeSpan lifetime, CancellationToken cancellationToken)
     {
         var (request, cookie, _, _) = await CreateAsync(tokens, email, returnUrl, now, lifetime, NewSecret(), cancellationToken).ConfigureAwait(false);
