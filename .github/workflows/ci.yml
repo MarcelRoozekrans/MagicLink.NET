@@ -136,7 +136,6 @@ jobs:
           IFS=. read -r major minor patch <<< "$released"
           version="$major.$minor.$((patch + 1))-ci"
           echo "PACK_VERSION=$version" >> "$GITHUB_ENV"
-          mkdir -p artifacts
           for project in src/*/*.csproj; do
             dotnet msbuild "$project" -getProperty:PackageId -getProperty:IsPackable \
               | jq -r 'select(.Properties.IsPackable == "true") | .Properties.PackageId'

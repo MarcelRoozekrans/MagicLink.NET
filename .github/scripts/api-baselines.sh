@@ -103,6 +103,7 @@ if [ "$read_any" = false ]; then
   exit 1
 fi
 
+mkdir -p "$(dirname "$output")"
 {
   echo '<?xml version="1.0" encoding="utf-8"?>'
   echo "<!-- Written by .github/scripts/api-baselines.sh for packing version $packing_version. -->"

@@ -70,6 +70,13 @@ expect "an unpublished package is skipped" 0 0.1.3 "$(printf 'released\nnever-pu
 if grep -qE "never-published|prerelease-only|'empty'" "$work/out.props"; then
   echo "FAIL an unpublished package got a baseline"; failures=$((failures + 1))
 fi
+rm -rf "$work/new-dir"
+if printf 'released\n' | bash "$script" 0.1.3 "$work/new-dir/sub/out.props" > /dev/null 2>&1 \
+  && grep -q "<PackageValidationBaselineVersion>0.1.2<" "$work/new-dir/sub/out.props"; then
+  echo "ok   the output directory is created"
+else
+  echo "FAIL the output directory is created"; failures=$((failures + 1))
+fi
 expect "no release below the packing version fails" 1 0.1.0 released
 expect "a packing version that is not semver fails" 1 0.1 released
 expect "an answer that is not JSON fails" 1 0.1.3 broken
