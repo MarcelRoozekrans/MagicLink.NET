@@ -58,16 +58,8 @@ internal sealed partial class ClientRegistration(IServiceProvider services, Host
                 stored.Add(application);
             }
 
-            foreach (var application in stored)
-            {
-                var clientId = await manager.GetClientIdAsync(application, cancellationToken).ConfigureAwait(false);
-                if (clientId is null || !configured.Contains(clientId))
-                {
-                    await manager.DeleteAsync(application, cancellationToken).ConfigureAwait(false);
-                    LogRemoved(logger, clientId);
-                }
-            }
-
+            // Adds and updates first, then removes: when the store refuses a client, the start fails without having
+            // removed any.
             foreach (var client in setup.Clients)
             {
                 // A fresh copy each time: OpenIddict may change the descriptor it is given, such as hashing the secret.
@@ -80,6 +72,16 @@ internal sealed partial class ClientRegistration(IServiceProvider services, Host
                 else
                 {
                     await manager.UpdateAsync(application, descriptor, cancellationToken).ConfigureAwait(false);
+                }
+            }
+
+            foreach (var application in stored)
+            {
+                var clientId = await manager.GetClientIdAsync(application, cancellationToken).ConfigureAwait(false);
+                if (clientId is null || !configured.Contains(clientId))
+                {
+                    await manager.DeleteAsync(application, cancellationToken).ConfigureAwait(false);
+                    LogRemoved(logger, clientId);
                 }
             }
 

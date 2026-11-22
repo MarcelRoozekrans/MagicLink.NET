@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using Microsoft.AspNetCore.WebUtilities;
 using OpenIddict.Abstractions;
 using ZeroAlloc.Results;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -186,13 +187,18 @@ internal sealed class HostSetup
         for (var index = 0; index < client.RedirectUris.Count; index++)
         {
             // On Linux a path such as /callback parses as an absolute file URI, which is no address to redirect to.
-            if (Uri.TryCreate(client.RedirectUris[index], UriKind.Absolute, out var redirect) && !redirect.IsFile && redirect.Fragment.Length == 0)
+            if (!Uri.TryCreate(client.RedirectUris[index], UriKind.Absolute, out var redirect) || redirect.IsFile || redirect.Fragment.Length > 0)
             {
-                descriptor.RedirectUris.Add(redirect);
+                problems.Add($"{prefix}RedirectUris__{index} must be an absolute address without a fragment, not '{client.RedirectUris[index]}'.");
+            }
+            else if (HasIssParameter(redirect))
+            {
+                // MagicLink.NET adds the issuer as iss to the redirect (RFC 9207), so OpenIddict refuses a redirect that has one.
+                problems.Add($"{prefix}RedirectUris__{index} must not have an iss parameter in its query, which MagicLink.NET adds itself: '{client.RedirectUris[index]}'.");
             }
             else
             {
-                problems.Add($"{prefix}RedirectUris__{index} must be an absolute address without a fragment, not '{client.RedirectUris[index]}'.");
+                descriptor.RedirectUris.Add(redirect);
             }
         }
 
@@ -203,6 +209,9 @@ internal sealed class HostSetup
 
         return problems.Count == count ? descriptor : null;
     }
+
+    private static bool HasIssParameter(Uri redirect) =>
+        QueryHelpers.ParseQuery(redirect.Query).ContainsKey(Parameters.Iss);
 
     private static void AddScope(OpenIddictApplicationDescriptor descriptor, string scope, string setting, List<string> problems)
     {
