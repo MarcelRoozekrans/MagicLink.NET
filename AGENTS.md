@@ -46,4 +46,4 @@ A pack without `-p:Version` fails on purpose with `MLVERSION001`; see `Directory
   printf 'MagicLink.NET\nMagicLink.NET.PostgreSql\n' | .github/scripts/api-baselines.sh 0.1.3-ci "$PWD/artifacts/api-baselines.props"
   dotnet pack -c Release -p:Version=0.1.3-ci -o artifacts/nupkg -p:MagicLinkApiBaselines="$PWD/artifacts/api-baselines.props"
   ```
-* Required checks on `main`: `build-test`, `pack`, `commitlint`, `baseline / gitleaks`, `baseline / codeql (csharp)`, `baseline / nuget-audit`, `codecov/project`, `aot-proof` and `container-image`.
+* Required checks on `main`: `build-test`, `pack`, `commitlint`, `baseline / gitleaks`, `baseline / codeql (csharp)`, `baseline / nuget-audit`, `codecov/project`, `aot-proof`, `container-image` and `breaking-suppression`, from the `api-compat` workflow.
