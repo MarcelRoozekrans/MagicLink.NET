@@ -189,17 +189,7 @@ internal sealed class HostSetup
 
         for (var index = 0; index < client.RedirectUris.Count; index++)
         {
-            // On Linux a path such as /callback parses as an absolute file URI, which is no address to redirect to.
-            if (!Uri.TryCreate(client.RedirectUris[index], UriKind.Absolute, out var redirect) || redirect.IsFile || redirect.Fragment.Length > 0)
-            {
-                problems.Add($"{prefix}RedirectUris__{index} must be an absolute address without a fragment, not '{client.RedirectUris[index]}'.");
-            }
-            else if (HasIssParameter(redirect))
-            {
-                // MagicLink.NET adds the issuer as iss to the redirect (RFC 9207), so OpenIddict refuses a redirect that has one.
-                problems.Add($"{prefix}RedirectUris__{index} must not have an iss parameter in its query, which MagicLink.NET adds itself: '{client.RedirectUris[index]}'.");
-            }
-            else
+            if (ReadRedirectUri(client.RedirectUris[index], $"{prefix}RedirectUris__{index}", problems) is { } redirect)
             {
                 descriptor.RedirectUris.Add(redirect);
             }
@@ -211,6 +201,32 @@ internal sealed class HostSetup
         }
 
         return problems.Count == count ? descriptor : null;
+    }
+
+    private static Uri? ReadRedirectUri(string value, string setting, List<string> problems)
+    {
+        // On Linux a path such as /callback parses as an absolute file URI, which is no address to redirect to.
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var redirect) || redirect.IsFile || redirect.Fragment.Length > 0)
+        {
+            problems.Add($"{setting} must be an absolute address without a fragment, not '{value}'.");
+        }
+        else if (string.Equals(redirect.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal) && !redirect.IsLoopback)
+        {
+            // The redirect carries the authorization code, so plain http is only for a callback on the same machine,
+            // as a CLI uses (RFC 9700, section 2.6).
+            problems.Add($"{setting} must use https, or http on localhost or a loopback address: '{value}'.");
+        }
+        else if (HasIssParameter(redirect))
+        {
+            // MagicLink.NET adds the issuer as iss to the redirect (RFC 9207), so OpenIddict refuses a redirect that has one.
+            problems.Add($"{setting} must not have an iss parameter in its query, which MagicLink.NET adds itself: '{value}'.");
+        }
+        else
+        {
+            return redirect;
+        }
+
+        return null;
     }
 
     private static bool HasIssParameter(Uri redirect) =>

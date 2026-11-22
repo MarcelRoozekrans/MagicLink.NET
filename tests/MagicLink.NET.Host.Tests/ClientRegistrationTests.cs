@@ -53,17 +53,19 @@ public sealed class ClientRegistrationTests(PostgresDatabase database) : IClassF
     }
 
     [Fact]
-    public async Task A_client_with_a_query_in_its_redirect_uri_is_registered()
+    public async Task Https_and_loopback_redirect_uris_with_a_query_are_registered()
     {
         var settings = _setup.Settings(database.ConnectionString, smtpPort: 25);
         settings["MagicLink:Clients:0:RedirectUris:0"] = "http://localhost/callback?tenant=1";
+        settings["MagicLink:Clients:0:RedirectUris:1"] = "http://127.0.0.1:8400/callback";
+        settings["MagicLink:Clients:0:RedirectUris:2"] = "https://app.example/callback";
         var services = await StartAsync(settings);
 
         await using var scope = services.CreateAsyncScope();
         var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
         var cli = await manager.FindByClientIdAsync(TestSetup.PublicClient, Cancel);
         Assert.NotNull(cli);
-        Assert.Equal(["http://localhost/callback?tenant=1"], await manager.GetRedirectUrisAsync(cli, Cancel));
+        Assert.Equal(["http://localhost/callback?tenant=1", "http://127.0.0.1:8400/callback", "https://app.example/callback"], (await manager.GetRedirectUrisAsync(cli, Cancel)).AsEnumerable(), StringComparer.Ordinal);
     }
 
     [Fact]

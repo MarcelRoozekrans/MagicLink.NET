@@ -1,5 +1,6 @@
 using System.Net;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using MagicLink.Host.Tests.Mail;
@@ -32,10 +33,22 @@ public sealed class FlowTests(HostUnderTest host) : IClassFixture<HostUnderTest>
     public async Task Tokens_are_signed_with_the_configured_certificate()
     {
         using var document = await GetJson("/.well-known/jwks");
-
         var key = Assert.Single(document.RootElement.GetProperty("keys").EnumerateArray());
         var thumbprint = Convert.ToHexString(WebEncoders.Base64UrlDecode(key.GetProperty("x5t").GetString()!));
         Assert.Equal(host.SigningThumbprint, thumbprint, ignoreCase: true);
+
+        var verifier = NewVerifier();
+        var code = await AuthorizeAsync(TestSetup.PublicClient, verifier, "openid");
+        using var tokens = await ReadJson(await RedeemAsync(TestSetup.PublicClient, secret: null, code, verifier));
+
+        // The access token's signature checks out against the certificate the key set publishes.
+        var parts = tokens.RootElement.GetProperty("access_token").GetString()!.Split('.');
+        using var header = JsonDocument.Parse(WebEncoders.Base64UrlDecode(parts[0]));
+        Assert.Equal("RS256", header.RootElement.GetProperty("alg").GetString());
+        Assert.Equal(key.GetProperty("kid").GetString(), header.RootElement.GetProperty("kid").GetString());
+        using var certificate = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(key.GetProperty("x5c")[0].GetString()!));
+        using var rsa = certificate.GetRSAPublicKey()!;
+        Assert.True(rsa.VerifyData(Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]), WebEncoders.Base64UrlDecode(parts[2]), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
     }
 
     [Fact]
