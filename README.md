@@ -2,7 +2,7 @@
 
 A small identity provider for .NET that signs people in with a link or a short code sent by email, and speaks OpenID Connect (OIDC) to everything else. It is meant for organizations without an identity provider of their own: applications keep speaking plain OIDC, and MagicLink.NET handles the email sign-in behind it.
 
-**Status:** not built yet. The design is agreed. OpenIddict's server stack is proven to run under Native AOT; the proof app is in `samples/MagicLink.NET.AotProof` and CI re-runs it on every pull request. The own OpenIddict store on PostgreSQL is in `src/MagicLink.NET.PostgreSql`. The core in `src/MagicLink.NET` has the OIDC server for browser sign-in, the authorization code flow with PKCE, and the sign-in page where a person confirms with the link or the code, sending the sign-in email in the background, over SMTP by default, and a pluggable source of who may sign in and with which groups, with a file in git or a read-only query on an existing PostgreSQL or SQL Server database, and a `check-sign-in` command that shows what the source says about an address; the groups go into the `groups` claim of the tokens. An address the source does not know gets no email, but the same answer as a known one. The hosting API comes next.
+**Status:** not built yet. The design is agreed. OpenIddict's server stack is proven to run under Native AOT; the proof app is in `samples/MagicLink.NET.AotProof` and CI re-runs it on every pull request. The own OpenIddict store on PostgreSQL is in `src/MagicLink.NET.PostgreSql`. The core in `src/MagicLink.NET` has the OIDC server for browser sign-in, the authorization code flow with PKCE, and the sign-in page where a person confirms with the link or the code, sending the sign-in email in the background, over SMTP by default, and a pluggable source of who may sign in and with which groups, with a file in git or a read-only query on an existing PostgreSQL or SQL Server database, and a `check-sign-in` command that shows what the source says about an address; the groups go into the `groups` claim of the tokens. An address the source does not know gets no email, but the same answer as a known one. An existing ASP.NET Core app hosts it with `services.AddMagicLink(...)`; the container image comes next.
 
 ## What it will do
 
@@ -10,6 +10,27 @@ A small identity provider for .NET that signs people in with a link or a short c
 * Send a sign-in email with a link and a short code. Opening the link never signs anyone in; only pressing the button on the page, or typing the code, does. This keeps link-scanning mail filters from using up the link.
 * Decide who may sign in, and with which groups, from an existing database (read-only) or a file in git, and put the groups in the token.
 * Run on its own as a container, or inside an existing ASP.NET Core app as a NuGet package.
+
+## Hosting it in an ASP.NET Core app
+
+```csharp
+builder.Services.AddMagicLink(server => server
+        .SetIssuer(new Uri("https://signin.example.com/"))
+        .AddSigningCertificate(signing)
+        .AddEncryptionCertificate(encryption))
+    .AddCore(core => core.UsePostgreSql(store => store.ConnectionString = storeConnectionString));
+builder.Services.AddMagicLinkSignInFile(options => options.Path = "people.json");
+builder.Services.Configure<MagicLinkSmtpOptions>(smtp =>
+{
+    smtp.Host = "smtp.example.com";
+    smtp.From = "Sign-in <signin@example.com>";
+});
+
+var app = builder.Build();
+app.MapMagicLink();
+```
+
+`MagicLink.NET.PostgreSql` holds OpenIddict's data. Instead of the file, `AddMagicLinkSignInDatabase` reads who may sign in from an existing database, and an own `ISignInSource` or `ISignInMessageSender` replaces the source or the SMTP sender. MagicLink.NET does not start while a required setting is missing or wrong, and says which.
 
 ## How it is designed
 

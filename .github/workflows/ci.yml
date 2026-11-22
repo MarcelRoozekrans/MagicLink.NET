@@ -131,15 +131,15 @@ jobs:
           ls nupkg/*.nupkg
           [ "$(find nupkg -name '*.nupkg' | wc -l)" -gt 0 ]
 
-  # Proof that OpenIddict's server stack runs under Native AOT (issue #1, ADR-016) on the own PostgreSQL store
-  # (issue #2). Publishes the proof app as a native binary, where warnings are errors so any trim or AOT warning
-  # fails the publish, then runs the same flow tests that build-test runs in-process against that binary.
+  # Proof that MagicLink.NET runs under Native AOT (ADR-016): the proof app hosts the core through its hosting API
+  # (issue #11) on the own PostgreSQL store (issue #2). Publishes it as a native binary, where warnings are errors so any
+  # trim or AOT warning fails the publish, then runs the same flow tests that build-test runs in-process against it.
   aot-proof:
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
-    # The native binary runs on the MagicLink.NET PostgreSQL store, which proves the store under Native AOT and
-    # gives the device flow the token storage it needs.
+    # The native binary runs on the MagicLink.NET PostgreSQL store, which proves the store under Native AOT and holds
+    # the core's sign-in requests.
     services:
       postgres:
         image: postgres:16

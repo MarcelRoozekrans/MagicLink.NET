@@ -75,14 +75,17 @@ internal static partial class MagicLinkEndpoints
         await context.SignInAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, new ClaimsPrincipal(identity)).ConfigureAwait(false);
     }
 
-    /// <summary>Exchanges an authorization code for tokens carrying the identity the code was issued for.</summary>
+    /// <summary>
+    /// Exchanges an authorization code or a refresh token for tokens carrying the identity the code or refresh token was
+    /// issued for.
+    /// </summary>
     internal static async Task TokenAsync(HttpContext context)
     {
         var request = context.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("OpenIddict did not attach the token request.");
 
-        // OpenIddict rejects every grant type the server does not allow, so only the code grant gets here.
-        if (!request.IsAuthorizationCodeGrantType())
+        // OpenIddict rejects every grant type the server does not allow, so only these two get here.
+        if (!request.IsAuthorizationCodeGrantType() && !request.IsRefreshTokenGrantType())
         {
             throw new InvalidOperationException($"The grant type '{request.GrantType}' is not handled.");
         }
@@ -90,12 +93,36 @@ internal static partial class MagicLinkEndpoints
         var result = await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme).ConfigureAwait(false);
         if (!result.Succeeded)
         {
-            await context.ForbidAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, Error(Errors.InvalidGrant, "The authorization code is no longer valid.")).ConfigureAwait(false);
+            await context.ForbidAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, Error(Errors.InvalidGrant, "The authorization code or refresh token is no longer valid.")).ConfigureAwait(false);
             return;
         }
 
-        MagicLinkIdentity.KeepGroupsAList(result.Principal);
-        await context.SignInAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, result.Principal).ConfigureAwait(false);
+        var principal = result.Principal;
+        if (request.IsRefreshTokenGrantType())
+        {
+            // A refresh can extend a session for weeks, so the source is asked again, as on every authorization: a person
+            // taken out of it gets no new tokens, and a person moved to other groups gets tokens with the new ones.
+            var email = principal.GetClaim(Claims.Subject)
+                ?? throw new InvalidOperationException("A refresh token without a subject was accepted.");
+            var access = await context.RequestServices.GetRequiredService<ISignInSource>().LookUpAsync(email, context.RequestAborted).ConfigureAwait(false);
+            if (!access.MaySignIn)
+            {
+                RefreshRefused(Logger(context));
+                await context.ForbidAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, Error(Errors.InvalidGrant, "This email address may no longer sign in.")).ConfigureAwait(false);
+                return;
+            }
+
+            // Without a scope parameter a refresh keeps every scope of the refresh token; OpenIddict has already refused
+            // a scope parameter that asks for more than that.
+            var requested = request.GetScopes();
+            MagicLinkIdentity.PrepareRefresh(principal, access.Groups, requested.IsEmpty ? principal.GetScopes() : requested);
+        }
+        else
+        {
+            MagicLinkIdentity.KeepGroupsAList(principal);
+        }
+
+        await context.SignInAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, principal).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -165,6 +192,9 @@ internal static partial class MagicLinkEndpoints
 
     [LoggerMessage(Level = LogLevel.Information, Message = "A person with a session may no longer sign in, by the source of who may sign in; the session is ended and no tokens are issued.")]
     private static partial void Refused(ILogger logger);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "A refresh token was presented for a person who may no longer sign in, by the source of who may sign in; no tokens are issued.")]
+    private static partial void RefreshRefused(ILogger logger);
 
     private static AuthenticationProperties Error(string error, string description) => new(new Dictionary<string, string?>(StringComparer.Ordinal)
     {

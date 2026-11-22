@@ -33,6 +33,8 @@ It is known, and written down, whether OpenIddict's server stack runs under Nati
 * The flow tests in `tests/MagicLink.NET.AotProof.Tests` pass against the native binary on PostgreSQL: discovery, the key set, the authorization code flow with PKCE, the refresh token grant, the client credentials grant, the device authorization flow, and a protected endpoint that validates the access token. Refusals hold too: a wrong client secret, a wrong PKCE verifier, an unknown client, an unknown user code, a device code redeemed twice, and a call without a valid token.
 * Standing check: the `aot-proof` job in `.github/workflows/ci.yml` publishes the proof app as a native binary, starts it on a PostgreSQL service and runs the flow tests against it on every pull request, so an OpenIddict or SDK upgrade that breaks Native AOT turns CI red.
 
+Since issue #11 the proof app hosts the core, `MagicLink.NET`, through its public hosting API, so the native binary runs MagicLink.NET itself and not only OpenIddict. Its flow tests now sign a person in through the core's sign-in page with the code from the email, and cover discovery, the key set, the authorization code flow with PKCE, the refresh token grant, the groups from the source in the access token, an API of the host that checks the token, and the refusals of a wrong PKCE verifier, an unknown client and a call without a valid token. The in-memory store, the client credentials grant and the proof-only device flow went with the move; see the update of 2026-11-22 in ADR-016.
+
 ## Open questions
 
 None yet.

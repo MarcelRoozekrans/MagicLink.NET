@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+
 namespace MagicLink;
 
 /// <summary>
@@ -13,7 +15,7 @@ namespace MagicLink;
 /// <see cref="SignInSourceRegistration.AddMagicLinkSignInSource{TSource}"/>. MagicLink.NET does not start without a
 /// source. A source only reads: it never creates or changes people.
 /// </remarks>
-internal interface ISignInSource
+public interface ISignInSource
 {
     /// <summary>
     /// Whether <paramref name="email"/> may sign in, and if so with which groups. The address is normalized: trimmed

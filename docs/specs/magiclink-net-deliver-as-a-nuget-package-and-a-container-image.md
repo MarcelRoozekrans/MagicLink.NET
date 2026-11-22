@@ -26,6 +26,10 @@ MagicLink.NET can be hosted inside an existing ASP.NET Core app or run on its ow
 
 1. MagicLink.NET can be hosted in an existing ASP.NET Core app through the NuGet packages with `services.Add...`, and can run on its own from the container image, with the same behaviour.
 
+## How a host uses it
+
+An ASP.NET Core app hosts MagicLink.NET with `services.AddMagicLink(server => ...)`, which sets the issuer and keys, then `.AddCore(core => core.UsePostgreSql(...))` for the store, a source of who may sign in such as `services.AddMagicLinkSignInFile(...)`, and `app.MapMagicLink()`. The app keeps its own authentication and pages: MagicLink.NET's session is never the default scheme. An own source or sender implements the public `ISignInSource` or `ISignInMessageSender`. The container image of issue #12 is a thin host on the same calls, so both ways behave alike.
+
 ## Open questions
 
 * *Is the package id* `MagicLink.NET` *free on nuget.org? A prefix reservation has been requested.*

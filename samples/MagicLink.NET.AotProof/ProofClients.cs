@@ -1,26 +1,26 @@
 namespace MagicLink.AotProof;
 
-/// <summary>The fixed clients and test subject of the Native AOT proof. Proof-only values.</summary>
+/// <summary>The fixed client, person and settings of the Native AOT proof. Proof-only values.</summary>
 public static class ProofClients
 {
-    /// <summary>A confidential client that uses the client credentials grant.</summary>
-    public const string ConfidentialClientId = "proof-service";
-
-    /// <summary>The secret of <see cref="ConfidentialClientId"/>.</summary>
-    public const string ConfidentialClientSecret = "proof-secret";
-
     /// <summary>A public client that uses the authorization code flow with PKCE and refresh tokens.</summary>
     public const string PublicClientId = "proof-cli";
 
     /// <summary>The redirect URI registered for <see cref="PublicClientId"/>.</summary>
     public const string PublicRedirectUri = "http://localhost/callback";
 
-    /// <summary>A public client that uses the device authorization flow. Registered on PostgreSQL only.</summary>
-    public const string DeviceClientId = "proof-device";
-
     /// <summary>The setting, or environment variable, with the PostgreSQL connection string the proof runs on.</summary>
     public const string PostgresSetting = "MAGICLINK_AOT_PROOF_POSTGRES";
 
-    /// <summary>The subject the authorization endpoint signs in, since the proof has no sign-in page.</summary>
-    public const string TestSubject = "proof-user";
+    /// <summary>The setting, or environment variable, with the issuer; <c>http://localhost/</c> without it.</summary>
+    public const string IssuerSetting = "MAGICLINK_AOT_PROOF_ISSUER";
+
+    /// <summary>The only person who may sign in. MagicLink.NET uses the address as the subject of its tokens.</summary>
+    public const string TestPerson = "proof-user@example.com";
+
+    /// <summary>The group of <see cref="TestPerson"/>.</summary>
+    public const string TestGroup = "proof";
+
+    /// <summary>The claim MagicLink.NET puts a person's groups in.</summary>
+    public const string GroupsClaim = "groups";
 }

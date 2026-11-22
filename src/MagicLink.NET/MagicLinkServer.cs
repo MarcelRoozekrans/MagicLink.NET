@@ -11,8 +11,8 @@ namespace MagicLink;
 internal static class MagicLinkServer
 {
     /// <summary>
-    /// Adds the OpenID Connect server for browser sign-in: the authorization code flow with PKCE, the person's session
-    /// cookie, the sign-in page, and user info. The host still registers OpenIddict's store, through <c>AddCore</c>.
+    /// Adds the OpenID Connect server for browser sign-in: the authorization code flow with PKCE, refresh tokens for
+    /// applications that ask for <c>offline_access</c>, the person's session cookie, the sign-in page, and user info. The host still registers OpenIddict's store, through <c>AddCore</c>.
     /// </summary>
     /// <param name="builder">OpenIddict's builder.</param>
     /// <param name="configure">
@@ -33,7 +33,11 @@ internal static class MagicLinkServer
             options.AllowAuthorizationCodeFlow()
                 .RequireProofKeyForCodeExchange();
 
-            options.RegisterScopes(Scopes.OpenId, Scopes.Email);
+            // An application extends a session with a refresh token instead of a new email (Spec: run an OIDC provider,
+            // criterion 2). Each refresh gives a new refresh token, OpenIddict's default.
+            options.AllowRefreshTokenFlow();
+
+            options.RegisterScopes(Scopes.OpenId, Scopes.Email, Scopes.OfflineAccess);
             options.RegisterClaims(Claims.Subject, Claims.Email, Claims.EmailVerified, Claims.AuthenticationTime, MagicLinkIdentity.GroupsClaim);
 
             // Applications and their APIs check access tokens as plain signed JWTs against the published keys, as with
