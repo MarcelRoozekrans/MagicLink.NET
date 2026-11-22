@@ -36,7 +36,7 @@ A pack without `-p:Version` fails on purpose with `MLVERSION001`; see `Directory
 
 ## Layout and commits
 
-* `src/<Package>/` holds each shipped package and `tests/<Package>.Tests/` its tests. `src/MagicLink.NET.Host/` is the container image's app, not a package; the `Dockerfile` at the root builds the image, and the required `container-image` CI job runs the host's flow tests against it. Every project targets `net10.0`, set once in `Directory.Build.props`.
+* `src/<Package>/` holds each shipped package and `tests/<Package>.Tests/` its tests. `src/MagicLink.NET.Host/` is the container image's app, not a package; the `Dockerfile` at the root builds the image, and the required `container-image` CI job runs the host's flow tests against it, built natively on linux-x64 and linux-arm64. Every project targets `net10.0`, set once in `Directory.Build.props`.
 * Package versions live only in `Directory.Packages.props`; a `PackageReference` never carries a `Version`.
 * Public members in `src/` need XML docs; the build fails without them.
 * Conventional commits, checked by commitlint on every pull request (`.commitlintrc.yml`). release-please builds the changelog and the version from them. Never put nested parentheses in a commit body: release-please cannot parse such a commit and drops it from the changelog while the workflow still succeeds.

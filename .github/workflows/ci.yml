@@ -240,9 +240,21 @@ jobs:
 
   # The container image (issue #12): builds it from the Dockerfile, which publishes the host as Native AOT, starts it on
   # PostgreSQL with every setting from environment variables, and runs the host's flow tests against it. The image is
-  # never pushed: releases are done by a person.
-  container-image:
-    runs-on: ubuntu-latest
+  # never pushed: releases are done by a person. It is built for linux-x64 and linux-arm64 (issue #53), each on a runner
+  # of that architecture, since Native AOT does not cross-compile between them.
+  container-image-platform:
+    name: container-image (${{ matrix.platform }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-x64
+            runner: ubuntu-latest
+            arch: amd64
+          - platform: linux-arm64
+            runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
 
     services:
@@ -276,7 +288,12 @@ jobs:
           global-json-file: global.json
 
       - name: Build the image
-        run: docker build -t magiclink-net:ci .
+        run: |
+          docker build -t magiclink-net:ci .
+          arch="$(docker image inspect -f '{{.Architecture}}' magiclink-net:ci)"
+          if [ "$arch" != "${{ matrix.arch }}" ]; then
+            echo "The image was built for $arch, not ${{ matrix.arch }}." >&2; exit 1
+          fi
 
       # Certificates for this run only: signing and encrypting tokens, and serving HTTPS as localhost. The container's
       # user must read them. The tests trust the HTTPS certificate next to the usual roots.
@@ -361,6 +378,21 @@ jobs:
       - name: Show the container's log
         if: always()
         run: docker logs magiclink || true
+
+  # The required check on main: green only when the image passed on every platform above.
+  container-image:
+    needs: container-image-platform
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check every platform passed
+        env:
+          RESULT: ${{ needs.container-image-platform.result }}
+        run: |
+          if [ "$RESULT" != success ]; then
+            echo "The container image failed on at least one platform: $RESULT." >&2; exit 1
+          fi
 
   commitlint:
     if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-commitlint')
