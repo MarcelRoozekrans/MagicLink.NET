@@ -26,6 +26,8 @@ public sealed class SettingsTests(PostgresDatabase database) : IClassFixture<Pos
         var settings = _setup.Settings(database.ConnectionString, smtpPort: 2525);
         settings["MagicLink:CodeLifetime"] = "00:05:00";
         settings["MagicLink:MaxCodeAttempts"] = "3";
+        settings["MagicLink:MaxEmailsPerAddress"] = "2";
+        settings["MagicLink:EmailLimitWindow"] = "01:00:00";
         settings["MagicLink:Smtp:UserName"] = "mailer";
         settings["MagicLink:Smtp:Subject"] = "Sign in to Example";
         _host = new HostFactory(settings);
@@ -35,6 +37,8 @@ public sealed class SettingsTests(PostgresDatabase database) : IClassFixture<Pos
 
         Assert.Equal(TimeSpan.FromMinutes(5), codes.CodeLifetime);
         Assert.Equal(3, codes.MaxCodeAttempts);
+        Assert.Equal(2, codes.MaxEmailsPerAddress);
+        Assert.Equal(TimeSpan.FromHours(1), codes.EmailLimitWindow);
         Assert.Equal(2525, smtp.Port);
         Assert.False(smtp.UseStartTls);
         Assert.Equal("mailer", smtp.UserName);
