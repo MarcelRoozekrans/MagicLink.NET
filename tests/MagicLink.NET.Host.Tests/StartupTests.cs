@@ -35,6 +35,7 @@ public sealed class StartupTests : IDisposable
     [InlineData("MagicLink:Clients:0:ClientId", "", "MagicLink__Clients__0__ClientId")]
     [InlineData("MagicLink:Clients:0:RedirectUris:0", "/callback", "MagicLink__Clients__0__RedirectUris__0")]
     [InlineData("MagicLink:Clients:0:RedirectUris:0", "http://app.example/callback", "MagicLink__Clients__0__RedirectUris__0")]
+    [InlineData("MagicLink:Clients:0:RedirectUris:0", "ftp://app.example/callback", "MagicLink__Clients__0__RedirectUris__0")]
     [InlineData("MagicLink:Clients:0:RedirectUris:0", "http://localhost/callback?iss=https://other.example/", "MagicLink__Clients__0__RedirectUris__0")]
     [InlineData("MagicLink:Clients:0:Scopes:0", "profile", "MagicLink__Clients__0__Scopes__0")]
     [InlineData("MagicLink:Clients:1:ClientId", TestSetup.PublicClient, "MagicLink__Clients__1__ClientId")]

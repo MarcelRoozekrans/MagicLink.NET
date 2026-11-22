@@ -210,7 +210,8 @@ internal sealed class HostSetup
         {
             problems.Add($"{setting} must be an absolute address without a fragment, not '{value}'.");
         }
-        else if (string.Equals(redirect.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal) && !redirect.IsLoopback)
+        else if (!string.Equals(redirect.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+            && !(string.Equals(redirect.Scheme, Uri.UriSchemeHttp, StringComparison.Ordinal) && redirect.IsLoopback))
         {
             // The redirect carries the authorization code, so plain http is only for a callback on the same machine,
             // as a CLI uses (RFC 9700, section 2.6).

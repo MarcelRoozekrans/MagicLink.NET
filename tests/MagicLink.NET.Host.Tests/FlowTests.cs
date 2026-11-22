@@ -47,6 +47,7 @@ public sealed class FlowTests(HostUnderTest host) : IClassFixture<HostUnderTest>
         Assert.Equal("RS256", header.RootElement.GetProperty("alg").GetString());
         Assert.Equal(key.GetProperty("kid").GetString(), header.RootElement.GetProperty("kid").GetString());
         using var certificate = X509CertificateLoader.LoadCertificate(Convert.FromBase64String(key.GetProperty("x5c")[0].GetString()!));
+        Assert.Equal(host.SigningThumbprint, certificate.Thumbprint, ignoreCase: true);
         using var rsa = certificate.GetRSAPublicKey()!;
         Assert.True(rsa.VerifyData(Encoding.ASCII.GetBytes(parts[0] + "." + parts[1]), WebEncoders.Base64UrlDecode(parts[2]), HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1));
     }
