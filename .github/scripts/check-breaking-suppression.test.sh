@@ -108,6 +108,16 @@ commit "$d" -m "feat!: an unrelated break on main"
 nb=$(git -C "$d" rev-parse HEAD); git -C "$d" checkout -q pr
 expect "breaking commit only on the base branch" 1 "$d" "$nb" "feat!: remove Gone"
 
+# 11. A suppression file Git treats as binary is still read as text, so its new lines count.
+d=$(new_repo binary); b=$(git -C "$d" rev-parse HEAD)
+echo 'CompatibilitySuppressions.xml -diff' > "$d/.gitattributes"
+suppressions "M:C.Gone" > "$d/src/Pkg/CompatibilitySuppressions.xml"; commit "$d" -m "feat: remove Gone"
+expect "file marked -diff, no breaking commit" 1 "$d" "$b" "feat: remove Gone"
+
+# 12. A comparison Git cannot make fails instead of reading as "no suppression added".
+d=$(new_repo missing-base)
+expect "unknown base commit" 1 "$d" 0123456789abcdef0123456789abcdef01234567 "feat: anything"
+
 if [ "$failures" -gt 0 ]; then
   echo "$failures case(s) failed." >&2
   exit 1

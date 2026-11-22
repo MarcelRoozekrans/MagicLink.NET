@@ -8,10 +8,18 @@
     that has a release. Without it nothing here runs, so local builds and packs work as before.
 
     A deliberate break after 1.0 is accepted with the CompatibilitySuppressions.xml the SDK writes
-    beside the csproj (dotnet pack with -p:ApiCompatGenerateSuppressionFile=true), together with a
-    commit marked as breaking; the api-compat workflow checks that pairing. A suppression that no
-    longer matches stays an error, so once the release with the break is the baseline the file has
-    to go, and an old entry cannot hide a later break.
+    beside the csproj, together with a commit marked as breaking; the api-compat workflow checks
+    that pairing. To write the file, look up the baselines and pack with them, at the version CI
+    packs, the patch after the one in .release-please-manifest.json:
+
+      printf 'MagicLink.NET\nMagicLink.NET.PostgreSql\n' \
+        | .github/scripts/api-baselines.sh 1.2.4-ci "$PWD/artifacts/api-baselines.props"
+      dotnet pack -c Release -p:Version=1.2.4-ci -o artifacts/nupkg \
+        -p:MagicLinkApiBaselines="$PWD/artifacts/api-baselines.props" \
+        -p:ApiCompatGenerateSuppressionFile=true
+
+    A suppression that no longer matches stays an error, so once the release with the break is the
+    baseline the file has to go, and an old entry cannot hide a later break.
 
     While the baseline is below 1.0, SemVer allows a break in any release, so a break is reported
     as a warning instead of failing the pack: validation writes what it found to a file under obj/

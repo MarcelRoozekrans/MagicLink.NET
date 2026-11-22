@@ -23,9 +23,15 @@ title=$3
 suppression_files=':(glob)**/CompatibilitySuppressions*.xml'
 breaking_subject='^[a-z]+(\([^)]*\))?!: '
 
-# Lines the pull request adds to a suppression file, compared with where it branched off.
-added=$(git diff --no-ext-diff --unified=0 "$base...$head" -- "$suppression_files" \
-  | grep -E '^\+' | grep -vE '^\+\+\+ ' | grep -E '[^[:space:]+]' || true)
+# Lines the pull request adds to a suppression file, compared with where it branched off. --text
+# and --no-textconv read the file as it is, even when .gitattributes marks it binary or filters
+# it. The diff runs on its own, so a comparison Git cannot make fails here instead of reading as
+# "nothing added"; only the filters below may find nothing.
+if ! diff=$(git diff --no-ext-diff --no-textconv --text --unified=0 "$base...$head" -- "$suppression_files"); then
+  echo "::error::Git could not compare $base with $head, so it is unknown whether a suppression was added."
+  exit 1
+fi
+added=$(printf '%s\n' "$diff" | grep -E '^\+' | grep -vE '^\+\+\+ ' | grep -E '[^[:space:]+]' || true)
 
 if [ -z "$added" ]; then
   echo "No API compatibility suppression was added or extended."
