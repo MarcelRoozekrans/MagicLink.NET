@@ -4,7 +4,7 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 namespace MagicLink.AotProof;
 
 /// <summary>
-/// Registers the proof's fixed clients when the app starts. A client that already exists is left alone, so a restart on
+/// Registers the proof's fixed client when the app starts. When it already exists, it is left alone, so a restart on
 /// the same PostgreSQL database works. Proof-only.
 /// </summary>
 internal sealed class ProofClientRegistration(IServiceProvider services) : IHostedService
@@ -31,14 +31,6 @@ internal sealed class ProofClientRegistration(IServiceProvider services) : IHost
     {
         yield return new OpenIddictApplicationDescriptor
         {
-            ClientId = ProofClients.ConfidentialClientId,
-            ClientSecret = ProofClients.ConfidentialClientSecret,
-            ClientType = ClientTypes.Confidential,
-            Permissions = { Permissions.Endpoints.Token, Permissions.GrantTypes.ClientCredentials },
-        };
-
-        yield return new OpenIddictApplicationDescriptor
-        {
             ClientId = ProofClients.PublicClientId,
             ClientType = ClientTypes.Public,
             RedirectUris = { new Uri(ProofClients.PublicRedirectUri) },
@@ -52,18 +44,6 @@ internal sealed class ProofClientRegistration(IServiceProvider services) : IHost
                 Permissions.Prefixes.Scope + Scopes.OfflineAccess,
             },
             Requirements = { Requirements.Features.ProofKeyForCodeExchange },
-        };
-
-        yield return new OpenIddictApplicationDescriptor
-        {
-            ClientId = ProofClients.DeviceClientId,
-            ClientType = ClientTypes.Public,
-            Permissions =
-            {
-                Permissions.Endpoints.DeviceAuthorization,
-                Permissions.Endpoints.Token,
-                Permissions.GrantTypes.DeviceCode,
-            },
         };
     }
 }

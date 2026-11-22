@@ -19,7 +19,7 @@ When you are given one goal, such as "finish milestone First version", work thro
 ## What is specific to MagicLink.NET
 
 * Likely ZeroAlloc fits: ZeroAlloc.ORM for the own OpenIddict store (EF Core is ruled out by ADR-016), ZeroAlloc.Results, ZeroAlloc.Validation, ZeroAlloc.Telemetry and ZeroAlloc.Resilience. ZeroAlloc.Templates may serve as a starting point. OpenIddict expects the standard ASP.NET Core dependency injection; do not fight it.
-* Native AOT is a requirement (ADR-016, amended 2026-11-21). Every package under `src/` builds with `IsAotCompatible`, and the `aot-proof` CI job runs the native proof binary, which today covers OpenIddict and `MagicLink.NET.PostgreSql`. When the core gets its hosting API (issue #11), move the proof app onto it so the job covers the core too.
+* Native AOT is a requirement (ADR-016, amended 2026-11-21). Every package under `src/` builds with `IsAotCompatible`, and the `aot-proof` CI job runs the native proof binary. The proof app hosts the core through its public hosting API on `MagicLink.NET.PostgreSql`, so the job covers OpenIddict, the store and the core; a feature added to the core gets a flow test there when it can run without a person's mailbox.
 * Target .NET 10. Package ids are `MagicLink.NET` and `MagicLink.NET.*` (ADR-012).
 * Tests run against real PostgreSQL and SQL Server; CI provides both as service containers (see `.github/workflows/ci.yml`).
 

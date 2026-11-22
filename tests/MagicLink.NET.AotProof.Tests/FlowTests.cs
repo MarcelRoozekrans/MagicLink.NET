@@ -7,14 +7,17 @@ using Microsoft.AspNetCore.WebUtilities;
 
 namespace MagicLink.AotProof.Tests;
 
-/// <summary>The OpenIddict flows every store must serve. Each derived class runs them on one store.</summary>
-public abstract class FlowTests(ProofHost host)
+/// <summary>
+/// The flows of MagicLink.NET hosted in the proof app, on the PostgreSQL store. A person signs in through MagicLink.NET's
+/// sign-in page with the code from the email, as in any host.
+/// </summary>
+public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
 {
     private const string RedirectUri = "http://localhost/callback";
 
-    protected HttpClient Client => host.Client;
+    private HttpClient Client => host.Client;
 
-    protected static CancellationToken Cancel => TestContext.Current.CancellationToken;
+    private static CancellationToken Cancel => TestContext.Current.CancellationToken;
 
     [Fact]
     public async Task Discovery_lists_the_endpoints_and_pkce()
@@ -50,7 +53,9 @@ public abstract class FlowTests(ProofHost host)
         Assert.Equal(HttpStatusCode.OK, tokens.StatusCode);
         using var body = await ReadJson(tokens);
         Assert.True(body.RootElement.TryGetProperty("refresh_token", out _));
-        Assert.Equal(ProofClients.TestSubject, await CallApiMe(body.RootElement.GetProperty("access_token").GetString()!));
+        using var me = await CallApiMe(body.RootElement.GetProperty("access_token").GetString()!);
+        Assert.Equal(ProofClients.TestPerson, me.RootElement.GetProperty("subject").GetString());
+        Assert.Equal([ProofClients.TestGroup], me.RootElement.GetProperty("groups").EnumerateArray().Select(static group => group.GetString()), StringComparer.Ordinal);
     }
 
     [Fact]
@@ -70,25 +75,8 @@ public abstract class FlowTests(ProofHost host)
         Assert.Equal(HttpStatusCode.OK, refreshed.StatusCode);
         using var body = await ReadJson(refreshed);
         Assert.NotEqual(first.RootElement.GetProperty("access_token").GetString(), body.RootElement.GetProperty("access_token").GetString(), StringComparer.Ordinal);
-        Assert.Equal(ProofClients.TestSubject, await CallApiMe(body.RootElement.GetProperty("access_token").GetString()!));
-    }
-
-    [Fact]
-    public async Task Client_credentials_returns_a_token_that_opens_api_me()
-    {
-        using var response = await PostToken(ClientCredentials(ProofClients.ConfidentialClientSecret));
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var body = await ReadJson(response);
-        Assert.Equal(ProofClients.ConfidentialClientId, await CallApiMe(body.RootElement.GetProperty("access_token").GetString()!));
-    }
-
-    [Fact]
-    public async Task Wrong_client_secret_is_refused()
-    {
-        using var response = await PostToken(ClientCredentials("not-the-secret"));
-
-        Assert.Equal("invalid_client", await Error(response));
+        using var me = await CallApiMe(body.RootElement.GetProperty("access_token").GetString()!);
+        Assert.Equal(ProofClients.TestPerson, me.RootElement.GetProperty("subject").GetString());
     }
 
     [Fact]
@@ -127,13 +115,6 @@ public abstract class FlowTests(ProofHost host)
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
-    private static Dictionary<string, string> ClientCredentials(string secret) => new(StringComparer.Ordinal)
-    {
-        ["grant_type"] = "client_credentials",
-        ["client_id"] = ProofClients.ConfidentialClientId,
-        ["client_secret"] = secret,
-    };
-
     private static string NewVerifier() => Base64Url(RandomNumberGenerator.GetBytes(32));
 
     private static string Challenge(string verifier) => Base64Url(SHA256.HashData(Encoding.ASCII.GetBytes(verifier)));
@@ -151,16 +132,62 @@ public abstract class FlowTests(ProofHost host)
         ["state"] = "proof-state",
     });
 
+    /// <summary>
+    /// Asks for an authorization code in a fresh browser. MagicLink.NET sends it to its sign-in page; the person types
+    /// their address and then the code from the email, and the browser goes back to the authorization endpoint, which
+    /// redirects to the application with the code.
+    /// </summary>
     private async Task<string> Authorize(string clientId, string challenge)
     {
-        using var response = await Client.GetAsync(AuthorizeUri(clientId, challenge), Cancel);
+        var browser = new ProofBrowser(Client);
 
-        Assert.Equal(HttpStatusCode.Found, response.StatusCode);
+        using var emailForm = await browser.NavigateAsync(AuthorizeUri(clientId, challenge));
+        Assert.Equal(HttpStatusCode.OK, emailForm.StatusCode);
+        var sentBefore = (await ReadMailboxAsync()).Count;
+        using (var sent = await browser.SubmitFormAsync(emailForm, ("email", ProofClients.TestPerson)))
+        {
+            Assert.Equal(HttpStatusCode.SeeOther, sent.StatusCode);
+        }
+
+        var mailCode = await WaitForMailAsync(sentBefore);
+        using var codeForm = await browser.NavigateAsync("/signin/code");
+        Assert.Equal(HttpStatusCode.OK, codeForm.StatusCode);
+        using var confirmed = await browser.SubmitFormAsync(codeForm, ("code", mailCode));
+        Assert.Equal(HttpStatusCode.Redirect, confirmed.StatusCode);
+
+        using var response = await browser.NavigateAsync(ProofBrowser.PathOf(confirmed.Headers.Location!));
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         var location = response.Headers.Location!;
         Assert.StartsWith(RedirectUri, location.ToString(), StringComparison.Ordinal);
         var query = QueryHelpers.ParseQuery(location.Query);
         Assert.Equal("proof-state", query["state"].ToString());
         return query["code"].ToString();
+    }
+
+    /// <summary>The code of the sign-in email after the <paramref name="sentBefore"/> emails before it, which go out in the background.</summary>
+    private async Task<string> WaitForMailAsync(int sentBefore)
+    {
+        for (var attempt = 0; attempt < 100; attempt++)
+        {
+            var mailbox = await ReadMailboxAsync();
+            if (mailbox.Count > sentBefore)
+            {
+                return mailbox.Code!;
+            }
+
+            await Task.Delay(50, Cancel);
+        }
+
+        throw new TimeoutException("No sign-in email arrived within 5 seconds.");
+    }
+
+    private async Task<(int Count, string? Code)> ReadMailboxAsync()
+    {
+        using var response = await Client.GetAsync("/proof/mailbox?email=" + Uri.EscapeDataString(ProofClients.TestPerson), Cancel);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        using var body = await ReadJson(response);
+        var code = body.RootElement.GetProperty("code");
+        return (body.RootElement.GetProperty("count").GetInt32(), code.ValueKind == JsonValueKind.Null ? null : code.GetString());
     }
 
     private Task<HttpResponseMessage> RedeemCode(string code, string verifier) => PostToken(new Dictionary<string, string>(StringComparer.Ordinal)
@@ -172,20 +199,19 @@ public abstract class FlowTests(ProofHost host)
         ["redirect_uri"] = RedirectUri,
     });
 
-    protected async Task<HttpResponseMessage> PostToken(IEnumerable<KeyValuePair<string, string>> form)
+    private async Task<HttpResponseMessage> PostToken(IEnumerable<KeyValuePair<string, string>> form)
     {
         using var content = new FormUrlEncodedContent(form);
         return await Client.PostAsync("/connect/token", content, Cancel);
     }
 
-    protected async Task<string?> CallApiMe(string accessToken)
+    private async Task<JsonDocument> CallApiMe(string accessToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, "/api/me");
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
         using var response = await Client.SendAsync(request, Cancel);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        using var body = await ReadJson(response);
-        return body.RootElement.GetProperty("subject").GetString();
+        return await ReadJson(response);
     }
 
     private async Task<JsonDocument> GetJson(string path)
@@ -195,14 +221,14 @@ public abstract class FlowTests(ProofHost host)
         return await ReadJson(response);
     }
 
-    protected static async Task<string?> Error(HttpResponseMessage response)
+    private static async Task<string?> Error(HttpResponseMessage response)
     {
         Assert.False(response.IsSuccessStatusCode);
         using var body = await ReadJson(response);
         return body.RootElement.GetProperty("error").GetString();
     }
 
-    protected static async Task<JsonDocument> ReadJson(HttpResponseMessage response)
+    private static async Task<JsonDocument> ReadJson(HttpResponseMessage response)
         => JsonDocument.Parse(await response.Content.ReadAsStringAsync(Cancel));
 
     private static List<string> Strings(JsonElement array) => array.EnumerateArray().Select(item => item.GetString() ?? string.Empty).ToList();

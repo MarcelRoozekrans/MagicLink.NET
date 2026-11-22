@@ -10,7 +10,7 @@
     <PackageReference Include="ZeroAlloc.Resilience" />
     <PackageReference Include="ZeroAlloc.Results" />
   </ItemGroup>
-  <!-- The hosting API is internal until issue #11 makes it public; the tests host it meanwhile. -->
+  <!-- The tests also check internals, such as the mail queue and the sign-in requests in the store. -->
   <ItemGroup>
     <InternalsVisibleTo Include="MagicLink.NET.Tests" />
   </ItemGroup>
