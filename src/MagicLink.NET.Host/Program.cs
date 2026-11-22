@@ -53,8 +53,17 @@ builder.Services.Configure<MagicLinkSmtpOptions>(section.GetSection("Smtp"));
 builder.Services.AddHostedService<ClientRegistration>();
 
 var app = builder.Build();
+
+// docker run magiclink-net check-sign-in ann@example.com answers from the source in the settings and exits, without
+// starting the server (issue #9).
+if (await CheckSignInCommand.TryRunAsync(app.Services, args, Console.Out, CancellationToken.None).ConfigureAwait(false) is { } exitCode)
+{
+    return exitCode;
+}
+
 app.MapMagicLink();
 await app.RunAsync().ConfigureAwait(false);
+return 0;
 
 /// <summary>The container's host. Public for the tests' <c>WebApplicationFactory</c>.</summary>
 public partial class Program;

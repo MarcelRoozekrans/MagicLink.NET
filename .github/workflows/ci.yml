@@ -327,6 +327,17 @@ jobs:
           MAGICLINK_HOST_MAILPIT_URL: http://localhost:8025
         run: dotnet test --project tests/MagicLink.NET.Host.Tests -c Release -- --filter-class MagicLink.Host.Tests.FlowTests
 
+      # The image runs the check-sign-in command with its settings, without a shell: the chiseled image has none.
+      - name: Run check-sign-in in the container
+        run: |
+          docker exec magiclink ./MagicLink.NET.Host check-sign-in host-person@example.com
+          # 1 means the address may not sign in; 2 means the source could not answer, which proves nothing.
+          code=0
+          docker exec magiclink ./MagicLink.NET.Host check-sign-in outsider@example.com || code=$?
+          if [ "$code" != 1 ]; then
+            echo "check-sign-in for an address that is not listed exited with $code, not 1." >&2; exit 1
+          fi
+
       - name: Show the container's log
         if: always()
         run: docker logs magiclink || true
