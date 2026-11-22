@@ -34,7 +34,7 @@ MagicLink.NET looks up whether an email address may sign in and which groups the
 
 ## Open questions
 
-* *Should MagicLink.NET fetch the file from a git repository itself?* The first version reads the file from a path: a checkout of the repository, or a file mounted from it, such as a Kubernetes ConfigMap that a GitOps tool keeps up to date. It reads the file again when it changes, so a new commit applies without a restart. Cloning and pulling a repository would need credentials for it and a git client in the process. Written down while building issue #7.
+* *Should MagicLink.NET fetch the file from a git repository itself?* No. MagicLink.NET reads the file from a path: a checkout of the repository, or a file mounted from it, such as a Kubernetes ConfigMap that a GitOps tool keeps up to date. It reads the file again when it changes, so a new commit applies without a restart. Cloning and pulling a repository would need credentials for it and a git client in the process. Written down while building issue #7, settled on 2026-11-22.
 * *How does an operator run the test command?* `CheckSignInCommand.TryRunAsync` is public: an app that hosts MagicLink.NET runs it on its built host when its arguments start with `check-sign-in`, and the container image does that itself, so `docker run magiclink-net check-sign-in ann@example.com` answers from the source in its settings without starting the server. Settled while merging issue #9 after issues #11 and #12.
 
 ## Decided while building
