@@ -68,13 +68,15 @@ public sealed class SettingsTests(PostgresDatabase database) : IClassFixture<Pos
     }
 
     [Fact]
-    public void Without_settings_no_proxy_is_trusted()
+    public void Without_settings_only_the_framework_defaults_are_trusted()
     {
         _host = new HostFactory(_setup.Settings(database.ConnectionString, smtpPort: 2525));
 
         var forwarded = _host.Services.GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
 
-        Assert.Empty(forwarded.KnownProxies);
-        Assert.Empty(forwarded.KnownIPNetworks);
+        // The framework's defaults: only the loopback address is trusted, and only one hop is read.
+        Assert.Equal([IPAddress.IPv6Loopback], forwarded.KnownProxies);
+        Assert.Equal([System.Net.IPNetwork.Parse("127.0.0.0/8")], forwarded.KnownIPNetworks);
+        Assert.Equal(1, forwarded.ForwardLimit);
     }
 }

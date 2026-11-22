@@ -50,24 +50,28 @@ else
 builder.Services.Configure<MagicLinkOptions>(section);
 
 // Behind a reverse proxy, the client's IP address, which the per-client sign-in limit counts, comes from the
-// X-Forwarded-For header, but only from the proxies the settings trust; without any, from the connection (spec "confirm
-// sign-in with a link or a code", criterion 8).
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
+// X-Forwarded-For header, but only from the proxies the settings trust (spec "confirm sign-in with a link or a code",
+// criterion 8). Without any, the options keep the framework's defaults, which trust only the loopback address, so that
+// ASPNETCORE_FORWARDEDHEADERS_ENABLED cannot make the host trust every caller's header either.
+if (host.TrustsProxies)
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.ForwardLimit = null;
-    options.KnownProxies.Clear();
-    options.KnownIPNetworks.Clear();
-    foreach (var proxy in host.TrustedProxies)
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
-        options.KnownProxies.Add(proxy);
-    }
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        options.ForwardLimit = null;
+        options.KnownProxies.Clear();
+        options.KnownIPNetworks.Clear();
+        foreach (var proxy in host.TrustedProxies)
+        {
+            options.KnownProxies.Add(proxy);
+        }
 
-    foreach (var network in host.TrustedProxyNetworks)
-    {
-        options.KnownIPNetworks.Add(network);
-    }
-});
+        foreach (var network in host.TrustedProxyNetworks)
+        {
+            options.KnownIPNetworks.Add(network);
+        }
+    });
+}
 builder.Services.Configure<MagicLinkSmtpOptions>(section.GetSection("Smtp"));
 
 // Registered after the store, so its migrations have run when the clients are registered.
