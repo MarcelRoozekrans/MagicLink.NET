@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.0](https://github.com/MarcelRoozekrans/MagicLink.NET/compare/v0.1.2...v0.2.0) (2026-11-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* send the sign-in email over port 465 too, through MailKit
+
+### Features
+
+* build the container image for linux-x64 and linux-arm64 ([03cbd38](https://github.com/MarcelRoozekrans/MagicLink.NET/commit/03cbd38998a39092210da5447e8f872c1a4a5847)), closes [#53](https://github.com/MarcelRoozekrans/MagicLink.NET/issues/53)
+* limit how many sign-ins one client IP address starts ([d2bf10b](https://github.com/MarcelRoozekrans/MagicLink.NET/commit/d2bf10b4c58a2f6e2b804c4ce125cd6fe0ec4fd8)), closes [#55](https://github.com/MarcelRoozekrans/MagicLink.NET/issues/55)
+* send the sign-in email over port 465 too, through MailKit ([3a2f0cb](https://github.com/MarcelRoozekrans/MagicLink.NET/commit/3a2f0cbd757355b92c0c1baaac3a2d9f909bfd9e)), closes [#54](https://github.com/MarcelRoozekrans/MagicLink.NET/issues/54)
+
 ## [0.1.2](https://github.com/MarcelRoozekrans/MagicLink.NET/compare/v0.1.1...v0.1.2) (2026-11-22)
 
 
