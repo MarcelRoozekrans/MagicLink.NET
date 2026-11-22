@@ -138,7 +138,7 @@ internal static partial class MagicLinkEndpoints
     }
 
     /// <summary>Asks the source of who may sign in about the subject of a refresh token or device code.</summary>
-    private static ValueTask<SignInAccess> LookUpAgainAsync(HttpContext context, ClaimsPrincipal principal)
+    internal static ValueTask<SignInAccess> LookUpAgainAsync(HttpContext context, ClaimsPrincipal principal)
     {
         var email = principal.GetClaim(Claims.Subject)
             ?? throw new InvalidOperationException("A refresh token or device code without a subject was accepted.");
