@@ -1,5 +1,7 @@
 using MagicLink;
+using Microsoft.AspNetCore.Authentication;
 using OpenIddict.Server;
+using OpenIddict.Server.AspNetCore;
 
 namespace Microsoft.Extensions.DependencyInjection;
 
@@ -25,13 +27,38 @@ public static class MagicLinkServiceCollectionExtensions
     /// with <see cref="SignInSourceRegistration.AddMagicLinkSignInSource{TSource}"/>. The sign-in email goes over SMTP
     /// with the settings in <see cref="MagicLinkSmtpOptions"/>, unless the app registers its own
     /// <see cref="ISignInMessageSender"/>. The app keeps its own authentication: MagicLink.NET's session is never the
-    /// default scheme. MagicLink.NET does not start while any of this is missing or wrong, and says why.
+    /// default scheme, and an app that relied on its only scheme being the default keeps that default. MagicLink.NET does not start while any of this is missing or wrong, and says why.
     /// </remarks>
     public static OpenIddictBuilder AddMagicLink(this IServiceCollection services, Action<OpenIddictServerBuilder> configure)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configure);
 
-        return services.AddOpenIddict().AddMagicLinkServer(configure);
+        var builder = services.AddOpenIddict().AddMagicLinkServer(configure);
+        services.PostConfigure<AuthenticationOptions>(KeepTheAppsDefaultScheme);
+        return builder;
+    }
+
+    /// <summary>
+    /// ASP.NET Core makes an app's only scheme its default without the app naming it. MagicLink.NET adds two schemes of
+    /// its own, its session and OpenIddict's, which would take that default away; this gives it back. A default the app
+    /// set itself is left alone, and so is an app with more schemes, which had no implicit default before.
+    /// </summary>
+    private static void KeepTheAppsDefaultScheme(AuthenticationOptions options)
+    {
+        if (options.DefaultScheme is not null)
+        {
+            return;
+        }
+
+        var own = options.Schemes
+            .Where(static scheme => !string.Equals(scheme.Name, MagicLinkSession.Scheme, StringComparison.Ordinal)
+                && !string.Equals(scheme.Name, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, StringComparison.Ordinal))
+            .Take(2)
+            .ToList();
+        if (own.Count == 1)
+        {
+            options.DefaultScheme = own[0].Name;
+        }
     }
 }

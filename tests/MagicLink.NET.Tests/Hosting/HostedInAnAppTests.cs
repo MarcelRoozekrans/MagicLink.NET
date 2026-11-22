@@ -1,7 +1,9 @@
 using System.Net;
+using System.Security.Claims;
 using MagicLink.PostgreSql.Tests;
 using MagicLink.Tests.SignIn;
-using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -51,15 +53,27 @@ public sealed class HostedInAnAppTests(HostedInAnAppTests.ExistingApp app) : ICl
         Assert.Equal(HttpStatusCode.OK, open.StatusCode);
         Assert.Equal("hello", await open.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
 
-        // The app's default scheme still challenges for the app's pages; MagicLink.NET's session is not the default.
+        // The app's own scheme is still its default, as the only scheme it registered: it challenges for the app's pages,
+        // and signs a person in to the app without naming a scheme. MagicLink.NET's session is never the default.
         using var closed = await browser.SendAsync(new HttpRequestMessage(HttpMethod.Get, new Uri(SignInHosts.MagicLink, "/private")));
         Assert.Equal(HttpStatusCode.Redirect, closed.StatusCode);
         Assert.Equal(ExistingApp.OwnLoginPath, closed.Headers.Location!.AbsolutePath);
+
+        using (var signedIn = await browser.SendAsync(new HttpRequestMessage(HttpMethod.Post, new Uri(SignInHosts.MagicLink, ExistingApp.OwnLoginPath))))
+        {
+            Assert.Equal(HttpStatusCode.OK, signedIn.StatusCode);
+        }
+
+        using var opened = await browser.SendAsync(new HttpRequestMessage(HttpMethod.Get, new Uri(SignInHosts.MagicLink, "/private")));
+        Assert.Equal(HttpStatusCode.OK, opened.StatusCode);
+        Assert.Equal("private for app-user", await opened.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
     }
 
     /// <summary>
     /// An app with its own pages and its own cookie sign-in, which hosts MagicLink.NET with the public API only:
-    /// <c>AddMagicLink</c>, a store, a source of who may sign in, a sender, and <c>MapMagicLink</c>.
+    /// <c>AddMagicLink</c>, a store, a source of who may sign in, a sender, and <c>MapMagicLink</c>. The app relies on
+    /// ASP.NET Core's implicit default scheme, and requires a signed-in user on every page that does not allow
+    /// anonymous access.
     /// </summary>
     public sealed class ExistingApp : IAsyncLifetime
     {
@@ -93,10 +107,12 @@ public sealed class HostedInAnAppTests(HostedInAnAppTests.ExistingApp app) : ICl
             var builder = WebApplication.CreateSlimBuilder(HostArgs);
             builder.WebHost.UseTestServer(server => server.BaseAddress = SignInHosts.MagicLink);
 
-            // What the app had before it hosted MagicLink.NET.
-            builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+            // What the app had before it hosted MagicLink.NET: one scheme, so the default without naming it, and a
+            // fallback policy that closes every page not marked anonymous.
+            builder.Services.AddAuthentication()
                 .AddCookie(options => options.LoginPath = OwnLoginPath);
-            builder.Services.AddAuthorization();
+            builder.Services.AddAuthorizationBuilder()
+                .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
 
             // MagicLink.NET, through the public hosting API.
             builder.Services.AddMagicLink(server => server.SetIssuer(SignInHosts.MagicLink).AddEphemeralEncryptionKey().AddEphemeralSigningKey())
@@ -105,8 +121,10 @@ public sealed class HostedInAnAppTests(HostedInAnAppTests.ExistingApp app) : ICl
             builder.Services.AddSingleton<ISignInMessageSender>(Mailbox);
 
             _app = builder.Build();
-            _app.MapGet("/hello", static () => "hello");
-            _app.MapGet("/private", static () => "private").RequireAuthorization();
+            _app.MapGet("/hello", static () => "hello").AllowAnonymous();
+            _app.MapGet("/private", static (ClaimsPrincipal user) => "private for " + user.Identity!.Name);
+            _app.MapPost(OwnLoginPath, static (HttpContext context) => context.SignInAsync(
+                new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Name, "app-user")], "own")))).AllowAnonymous();
             _app.MapMagicLink();
             await _app.StartAsync();
 
