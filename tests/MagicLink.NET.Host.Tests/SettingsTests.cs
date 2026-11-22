@@ -67,16 +67,22 @@ public sealed class SettingsTests(PostgresDatabase database) : IClassFixture<Pos
         Assert.Equal(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, forwarded.ForwardedHeaders);
     }
 
-    [Fact]
-    public void Without_settings_only_the_framework_defaults_are_trusted()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Without_trusted_proxies_no_forwarded_header_is_read(bool frameworkForwardingEnabled)
     {
-        _host = new HostFactory(_setup.Settings(database.ConnectionString, smtpPort: 2525));
+        var settings = _setup.Settings(database.ConnectionString, smtpPort: 2525);
+        if (frameworkForwardingEnabled)
+        {
+            // What ASPNETCORE_FORWARDEDHEADERS_ENABLED=true sets: the framework then trusts every caller's headers.
+            settings["FORWARDEDHEADERS_ENABLED"] = "true";
+        }
+
+        _host = new HostFactory(settings);
 
         var forwarded = _host.Services.GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
 
-        // The framework's defaults: only the loopback address is trusted, and only one hop is read.
-        Assert.Equal([IPAddress.IPv6Loopback], forwarded.KnownProxies);
-        Assert.Equal([System.Net.IPNetwork.Parse("127.0.0.0/8")], forwarded.KnownIPNetworks);
-        Assert.Equal(1, forwarded.ForwardLimit);
+        Assert.Equal(ForwardedHeaders.None, forwarded.ForwardedHeaders);
     }
 }

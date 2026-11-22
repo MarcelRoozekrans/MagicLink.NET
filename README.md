@@ -68,7 +68,7 @@ Every setting comes from an environment variable, or from an `appsettings.json` 
 
 The clients in the settings are the full list: each start adds new ones, updates changed ones and removes clients that are no longer listed, with their tokens. The container does not start while a setting is missing or wrong, and names each one.
 
-OpenID Connect needs HTTPS. Either let Kestrel serve it, with `ASPNETCORE_URLS=https://+:8443` and the certificate in `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__Password`, or put a proxy in front that ends TLS and name it in `MagicLink__ForwardedHeaders__KnownProxies__0` or `MagicLink__ForwardedHeaders__KnownNetworks__0`. MagicLink.NET then reads the client's address and scheme from that proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers only. Do not use `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` instead: it trusts those headers from any caller, so a client could pick the address the per-client sign-in limit counts.
+OpenID Connect needs HTTPS. Either let Kestrel serve it, with `ASPNETCORE_URLS=https://+:8443` and the certificate in `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__Password`, or put a proxy in front that ends TLS and name it in `MagicLink__ForwardedHeaders__KnownProxies__0` or `MagicLink__ForwardedHeaders__KnownNetworks__0`. MagicLink.NET then reads the client's address and scheme from that proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers only. Without those settings no forwarded header is read, also not with `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, which would trust those headers from any caller and let a client pick the address the per-client sign-in limit counts.
 
 ## How it is designed
 

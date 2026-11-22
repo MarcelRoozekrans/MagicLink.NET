@@ -51,8 +51,8 @@ builder.Services.Configure<MagicLinkOptions>(section);
 
 // Behind a reverse proxy, the client's IP address, which the per-client sign-in limit counts, comes from the
 // X-Forwarded-For header, but only from the proxies the settings trust (spec "confirm sign-in with a link or a code",
-// criterion 8). Without any, the options keep the framework's defaults, which trust only the loopback address, so that
-// ASPNETCORE_FORWARDEDHEADERS_ENABLED cannot make the host trust every caller's header either.
+// criterion 8). Without any, no forwarded header is read at all, so the connection's address counts: also when
+// ASPNETCORE_FORWARDEDHEADERS_ENABLED makes the framework add the middleware with every caller trusted.
 if (host.TrustsProxies)
 {
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -71,6 +71,10 @@ if (host.TrustsProxies)
             options.KnownIPNetworks.Add(network);
         }
     });
+}
+else
+{
+    builder.Services.Configure<ForwardedHeadersOptions>(static options => options.ForwardedHeaders = ForwardedHeaders.None);
 }
 builder.Services.Configure<MagicLinkSmtpOptions>(section.GetSection("Smtp"));
 
