@@ -81,6 +81,40 @@ internal static class Oidc
         });
     }
 
+    /// <summary>Asks for a device code and a user code, as a command-line tool does.</summary>
+    public static async Task<JsonDocument> RequestDeviceCodeAsync(Browser cli, string scope = "openid email offline_access")
+    {
+        using var response = await cli.SendAsync(new HttpRequestMessage(HttpMethod.Post, new Uri(SignInHosts.MagicLink, "/connect/device"))
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["client_id"] = SignInHosts.CliClientId,
+                ["scope"] = scope,
+            }),
+        });
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        return await ReadJson(response);
+    }
+
+    /// <summary>Polls the token endpoint with <paramref name="deviceCode"/>, as a command-line tool does.</summary>
+    public static Task<HttpResponseMessage> PostDeviceCodeAsync(Browser cli, string deviceCode) =>
+        cli.SendAsync(new HttpRequestMessage(HttpMethod.Post, new Uri(SignInHosts.MagicLink, "/connect/token"))
+        {
+            Content = new FormUrlEncodedContent(new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
+                ["client_id"] = SignInHosts.CliClientId,
+                ["device_code"] = deviceCode,
+            }),
+        });
+
+    /// <summary>The <c>error</c> of an error response.</summary>
+    public static async Task<string?> ErrorOf(HttpResponseMessage response)
+    {
+        using var error = await ReadJson(response);
+        return error.RootElement.GetProperty("error").GetString();
+    }
+
     public static async Task<JsonDocument> ReadJson(HttpResponseMessage response) =>
         await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(Cancel), cancellationToken: Cancel);
 

@@ -65,12 +65,13 @@ internal static class MagicLinkIdentity
     }
 
     /// <summary>
-    /// Prepares a principal restored from a refresh token for new tokens: the groups become <paramref name="groups"/>,
-    /// as the source of who may sign in returns them now, and every claim goes where the <paramref name="scopes"/> this
-    /// refresh grants allow. A refresh may ask for fewer scopes than the refresh token holds; OpenIddict narrows the
-    /// scopes of the access token then, but keeps each claim's stored destinations, so they are set again here.
+    /// Prepares a principal restored from a refresh token or a device code for new tokens: the groups become
+    /// <paramref name="groups"/>, as the source of who may sign in returns them now, and every claim goes where the
+    /// <paramref name="scopes"/> this request grants allow. A refresh may ask for fewer scopes than the refresh token
+    /// holds; OpenIddict narrows the scopes of the access token then, but keeps each claim's stored destinations, so
+    /// they are set again here.
     /// </summary>
-    public static void PrepareRefresh(ClaimsPrincipal principal, ImmutableArray<string> groups, ImmutableArray<string> scopes)
+    public static void PrepareForNewTokens(ClaimsPrincipal principal, ImmutableArray<string> groups, ImmutableArray<string> scopes)
     {
         ReplaceGroups(principal, groups);
         principal.SetDestinations(scopes.Contains(Scopes.Email, StringComparer.Ordinal) ? WithEmail : WithoutEmail);

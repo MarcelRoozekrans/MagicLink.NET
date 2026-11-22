@@ -91,4 +91,16 @@ public sealed class Browser(IReadOnlyDictionary<string, HttpMessageHandler> host
             cookie.Expired = true;
         }
     }
+
+    /// <summary>Forgets the cookie <paramref name="name"/> of <paramref name="site"/>, as when it expires.</summary>
+    public void ForgetCookie(Uri site, string name)
+    {
+        foreach (Cookie cookie in _cookies.GetCookies(site))
+        {
+            if (string.Equals(cookie.Name, name, StringComparison.Ordinal))
+            {
+                cookie.Expired = true;
+            }
+        }
+    }
 }
