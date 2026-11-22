@@ -30,6 +30,9 @@ internal sealed class HostConfiguration
     /// <summary>The PostgreSQL database of who may sign in, when that is the source.</summary>
     public MagicLinkSignInDatabaseOptions SignInDatabase { get; set; } = new();
 
+    /// <summary>The reverse proxies whose X-Forwarded-For and X-Forwarded-Proto headers are trusted.</summary>
+    public ForwardedHeadersSettings ForwardedHeaders { get; set; } = new();
+
     /// <summary>The applications that may sign people in through MagicLink.NET.</summary>
     public List<ClientSettings> Clients { get; set; } = [];
 }

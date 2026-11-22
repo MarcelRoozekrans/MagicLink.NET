@@ -1,4 +1,7 @@
+using System.Net;
 using MagicLink.PostgreSql.Tests;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 
@@ -28,6 +31,8 @@ public sealed class SettingsTests(PostgresDatabase database) : IClassFixture<Pos
         settings["MagicLink:MaxCodeAttempts"] = "3";
         settings["MagicLink:MaxEmailsPerAddress"] = "2";
         settings["MagicLink:EmailLimitWindow"] = "01:00:00";
+        settings["MagicLink:MaxSignInsPerClient"] = "50";
+        settings["MagicLink:ClientLimitWindow"] = "00:30:00";
         settings["MagicLink:Smtp:UserName"] = "mailer";
         settings["MagicLink:Smtp:Subject"] = "Sign in to Example";
         _host = new HostFactory(settings);
@@ -39,9 +44,45 @@ public sealed class SettingsTests(PostgresDatabase database) : IClassFixture<Pos
         Assert.Equal(3, codes.MaxCodeAttempts);
         Assert.Equal(2, codes.MaxEmailsPerAddress);
         Assert.Equal(TimeSpan.FromHours(1), codes.EmailLimitWindow);
+        Assert.Equal(50, codes.MaxSignInsPerClient);
+        Assert.Equal(TimeSpan.FromMinutes(30), codes.ClientLimitWindow);
         Assert.Equal(2525, smtp.Port);
         Assert.Equal(MagicLinkSmtpSecurity.None, smtp.Security);
         Assert.Equal("mailer", smtp.UserName);
         Assert.Equal("Sign in to Example", smtp.Subject);
+    }
+
+    [Fact]
+    public void The_trusted_proxies_follow_the_settings()
+    {
+        var settings = _setup.Settings(database.ConnectionString, smtpPort: 2525);
+        settings["MagicLink:ForwardedHeaders:KnownProxies:0"] = "10.0.0.5";
+        settings["MagicLink:ForwardedHeaders:KnownNetworks:0"] = "172.16.0.0/12";
+        _host = new HostFactory(settings);
+
+        var forwarded = _host.Services.GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
+
+        Assert.Equal([IPAddress.Parse("10.0.0.5")], forwarded.KnownProxies);
+        Assert.Equal([System.Net.IPNetwork.Parse("172.16.0.0/12")], forwarded.KnownIPNetworks);
+        Assert.Equal(ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto, forwarded.ForwardedHeaders);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Without_trusted_proxies_no_forwarded_header_is_read(bool frameworkForwardingEnabled)
+    {
+        var settings = _setup.Settings(database.ConnectionString, smtpPort: 2525);
+        if (frameworkForwardingEnabled)
+        {
+            // What ASPNETCORE_FORWARDEDHEADERS_ENABLED=true sets: the framework then trusts every caller's headers.
+            settings["FORWARDEDHEADERS_ENABLED"] = "true";
+        }
+
+        _host = new HostFactory(settings);
+
+        var forwarded = _host.Services.GetRequiredService<IOptions<ForwardedHeadersOptions>>().Value;
+
+        Assert.Equal(ForwardedHeaders.None, forwarded.ForwardedHeaders);
     }
 }

@@ -55,6 +55,8 @@ Every setting comes from an environment variable, or from an `appsettings.json` 
 | `MagicLink__Smtp__Host`, `__Port`, `__Security`, `__UserName`, `__Password`, `__From`, `__Subject` | The SMTP server that sends the sign-in email. `__Security` is `StartTls` by default, on port 587 or 25; `ImplicitTls` for TLS from the first byte, on port 465; or `None`, only for a server on the same host or network. |
 | `MagicLink__CodeLifetime`, `MagicLink__MaxCodeAttempts` | How long a code works, `00:10:00` by default, and how often it may be tried, 5 by default. |
 | `MagicLink__MaxEmailsPerAddress`, `MagicLink__EmailLimitWindow` | How many sign-in emails one address gets, 5 by default, within a window of `00:15:00` by default. |
+| `MagicLink__MaxSignInsPerClient`, `MagicLink__ClientLimitWindow` | How many sign-ins one client IP address starts, for any addresses, 20 by default, within a window of `00:15:00` by default. An IPv6 address counts by its /64 network. |
+| `MagicLink__ForwardedHeaders__KnownProxies__0`, `MagicLink__ForwardedHeaders__KnownNetworks__0` | The reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted, as IP addresses or as networks such as `10.0.0.0/8`. Behind a proxy, set them, or every person counts as the proxy against the per-client limit. |
 | `MagicLink__Clients__0__ClientId` | An application that may sign people in. Number the clients from 0. |
 | `MagicLink__Clients__0__RedirectUris__0` | Where MagicLink.NET sends the person back to with the code: an https address, or http on localhost or a loopback address. Number them from 0. |
 | `MagicLink__Clients__0__DeviceFlow` | `true` for a CLI that signs in with the device flow: the person types a user code in a browser. A client needs redirect URIs, the device flow, or both. |
@@ -66,7 +68,7 @@ Every setting comes from an environment variable, or from an `appsettings.json` 
 
 The clients in the settings are the full list: each start adds new ones, updates changed ones and removes clients that are no longer listed, with their tokens. The container does not start while a setting is missing or wrong, and names each one.
 
-OpenID Connect needs HTTPS. Either let Kestrel serve it, with `ASPNETCORE_URLS=https://+:8443` and the certificate in `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__Password`, or put a proxy in front that ends TLS and set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`. That setting trusts the forwarded headers of any caller, so the container must then be reachable through the proxy only.
+OpenID Connect needs HTTPS. Either let Kestrel serve it, with `ASPNETCORE_URLS=https://+:8443` and the certificate in `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__Password`, or put a proxy in front that ends TLS and name it in `MagicLink__ForwardedHeaders__KnownProxies__0` or `MagicLink__ForwardedHeaders__KnownNetworks__0`. MagicLink.NET then reads the client's address and scheme from that proxy's `X-Forwarded-For` and `X-Forwarded-Proto` headers only. Without those settings no forwarded header is read, also not with `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, which would trust those headers from any caller and let a client pick the address the per-client sign-in limit counts.
 
 ## How it is designed
 

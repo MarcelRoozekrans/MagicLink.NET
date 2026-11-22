@@ -68,8 +68,8 @@ internal static partial class SignInPage
 
     /// <summary>
     /// Starts a sign-in request for the typed address, binds it to this browser, queues the email with the link and code
-    /// when the source of who may sign in knows the address and it did not get too many emails lately, and moves on to
-    /// the page that asks for the code.
+    /// when the source of who may sign in knows the address and neither it nor the client got or started too many lately,
+    /// and moves on to the page that asks for the code.
     /// </summary>
     internal static async Task StartAsync(HttpContext context)
     {
@@ -97,15 +97,18 @@ internal static partial class SignInPage
         var now = Now(context);
         var limit = services.GetRequiredService<SignInMailLimit>();
         DateTimeOffset reserved = default;
-        var sendEmail = access.MaySignIn && limit.TryReserve(email, options.MaxEmailsPerAddress, options.EmailLimitWindow, out reserved);
+        var withoutEmail = !ClientMayStart(context, options) ? NoEmail.TooManyFromClient
+            : !access.MaySignIn ? NoEmail.Refused
+            : !limit.TryReserve(email, options.MaxEmailsPerAddress, options.EmailLimitWindow, out reserved) ? NoEmail.TooManyForAddress
+            : (NoEmail?)null;
 
-        // An address that may not sign in, or that got enough emails for now, gets a request too, one that nobody can
-        // confirm, and no email: the answer, the code page and the time they take are the same as when an email goes
-        // out, so nobody can find out which addresses exist (spec "confirm sign-in with a link or a code", criteria 4
-        // and 7).
-        var cookie = sendEmail
-            ? await StartWithEmailAsync(context, email, returnUrl, now, options, limit, reserved).ConfigureAwait(false)
-            : await StartWithoutEmailAsync(context, email, returnUrl, now, options, access.MaySignIn).ConfigureAwait(false);
+        // An address that may not sign in, that got enough emails for now, or that a client asked for after starting too
+        // many sign-ins, gets a request too, one that nobody can confirm, and no email: the answer, the code page and the
+        // time they take are the same as when an email goes out, so nobody can find out which addresses exist (spec
+        // "confirm sign-in with a link or a code", criteria 4, 7 and 8).
+        var cookie = withoutEmail is { } reason
+            ? await StartWithoutEmailAsync(context, email, returnUrl, now, options, reason).ConfigureAwait(false)
+            : await StartWithEmailAsync(context, email, returnUrl, now, options, limit, reserved).ConfigureAwait(false);
 
         context.Response.Cookies.Append(SignInRequest.BindingCookie, cookie, BindingCookieOptions(now + options.CodeLifetime));
 
@@ -145,21 +148,39 @@ internal static partial class SignInPage
     }
 
     /// <summary>
-    /// Starts a sign-in request that gets no email: the address may not sign in, or, when <paramref name="maySignIn"/>
-    /// is true, got enough emails for now. Returns the value of the binding cookie.
+    /// Counts this sign-in against the client's IP address (criterion 8); false when the client started too many
+    /// lately. Every sign-in counts, for a known or an unknown address, and none is given back. A request without a
+    /// remote address, as on a test server in memory, is not counted.
+    /// </summary>
+    private static bool ClientMayStart(HttpContext context, MagicLinkOptions options)
+    {
+        var address = context.Connection.RemoteIpAddress;
+        return address is null
+            || context.RequestServices.GetRequiredService<SignInClientLimit>().TryReserve(
+                SignInClientLimit.Key(address), options.MaxSignInsPerClient, options.ClientLimitWindow, out _);
+    }
+
+    /// <summary>
+    /// Starts a sign-in request that gets no email, for the given <paramref name="reason"/>. Returns the value of the
+    /// binding cookie.
     /// </summary>
     private static async Task<string> StartWithoutEmailAsync(
-        HttpContext context, string email, string returnUrl, DateTimeOffset now, MagicLinkOptions options, bool maySignIn)
+        HttpContext context, string email, string returnUrl, DateTimeOffset now, MagicLinkOptions options, NoEmail reason)
     {
         var (request, cookie) = await SignInRequest.CreateWithoutEmailAsync(
             Tokens(context), email, returnUrl, now, options.CodeLifetime, context.RequestAborted).ConfigureAwait(false);
-        if (maySignIn)
+        var logger = Logger(context);
+        switch (reason)
         {
-            TooManyEmails(Logger(context), request.Id, options.MaxEmailsPerAddress, options.EmailLimitWindow);
-        }
-        else
-        {
-            Refused(Logger(context), request.Id);
+            case NoEmail.TooManyFromClient:
+                TooManyFromClient(logger, request.Id, options.MaxSignInsPerClient, options.ClientLimitWindow);
+                break;
+            case NoEmail.TooManyForAddress:
+                TooManyEmails(logger, request.Id, options.MaxEmailsPerAddress, options.EmailLimitWindow);
+                break;
+            default:
+                Refused(logger, request.Id);
+                break;
         }
 
         return cookie;
@@ -367,6 +388,9 @@ internal static partial class SignInPage
     [LoggerMessage(Level = LogLevel.Warning, Message = "Sign-in request {RequestId} gets no email: the address already got {MaxEmails} sign-in emails within {Window}. The person sees the same answer as when an email goes out.")]
     private static partial void TooManyEmails(ILogger logger, string requestId, int maxEmails, TimeSpan window);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Sign-in request {RequestId} gets no email: its client IP address already started {MaxSignIns} sign-ins within {Window}. The person sees the same answer as when an email goes out.")]
+    private static partial void TooManyFromClient(ILogger logger, string requestId, int maxSignIns, TimeSpan window);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Sign-in request {RequestId} was confirmed; the person is signed in.")]
     private static partial void SignedIn(ILogger logger, string requestId);
 
@@ -381,4 +405,17 @@ internal static partial class SignInPage
 
     [LoggerMessage(Level = LogLevel.Information, Message = "A sign-in form failed the antiforgery check.")]
     private static partial void AntiforgeryFailed(ILogger logger);
+
+    /// <summary>Why a sign-in request gets no email.</summary>
+    private enum NoEmail
+    {
+        /// <summary>The source of who may sign in does not allow the address.</summary>
+        Refused,
+
+        /// <summary>The address got enough emails for now (criterion 7).</summary>
+        TooManyForAddress,
+
+        /// <summary>The client's IP address started enough sign-ins for now (criterion 8).</summary>
+        TooManyFromClient,
+    }
 }
