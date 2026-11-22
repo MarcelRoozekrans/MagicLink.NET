@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-  <!-- Proof that OpenIddict's server stack runs under Native AOT (issue #1, ADR-016). Not shipped. -->
+  <!--
+    Proof that MagicLink.NET runs under Native AOT (issue #1, ADR-016): an app that hosts the core package through its
+    public hosting API (issue #11), on the PostgreSQL store, published as a native binary. Not shipped.
+  -->
   <PropertyGroup>
     <IsPackable>false</IsPackable>
     <PublishAot>true</PublishAot>
@@ -7,12 +10,11 @@
     <RootNamespace>MagicLink.AotProof</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="OpenIddict.Core" />
-    <PackageReference Include="OpenIddict.Server.AspNetCore" />
     <PackageReference Include="OpenIddict.Validation.AspNetCore" />
     <PackageReference Include="OpenIddict.Validation.ServerIntegration" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\MagicLink.NET\MagicLink.NET.csproj" />
     <ProjectReference Include="..\..\src\MagicLink.NET.PostgreSql\MagicLink.NET.PostgreSql.csproj" />
   </ItemGroup>
 </Project>

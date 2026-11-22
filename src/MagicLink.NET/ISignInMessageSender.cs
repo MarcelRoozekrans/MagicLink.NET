@@ -12,7 +12,7 @@ namespace MagicLink;
 /// attempt gets 30 seconds, and an email that is still being sent after two minutes is given up. Never log <see cref="SignInMessage.Link"/> or
 /// <see cref="SignInMessage.Code"/>: either one signs the person in.
 /// </remarks>
-internal interface ISignInMessageSender
+public interface ISignInMessageSender
 {
     /// <summary>Sends <paramref name="message"/> to its address; throws when that fails.</summary>
     ValueTask SendAsync(SignInMessage message, CancellationToken cancellationToken);
