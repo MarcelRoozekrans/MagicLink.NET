@@ -37,8 +37,10 @@ internal sealed class ProofClientRegistration(IServiceProvider services) : IHost
             Permissions =
             {
                 Permissions.Endpoints.Authorization,
+                Permissions.Endpoints.DeviceAuthorization,
                 Permissions.Endpoints.Token,
                 Permissions.GrantTypes.AuthorizationCode,
+                Permissions.GrantTypes.DeviceCode,
                 Permissions.GrantTypes.RefreshToken,
                 Permissions.ResponseTypes.Code,
                 Permissions.Prefixes.Scope + Scopes.OfflineAccess,
