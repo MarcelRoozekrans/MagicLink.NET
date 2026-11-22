@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>MagicLink.Host.Tests</RootNamespace>
+    <!-- In xUnit test projects, ConfigureAwait(false) is forbidden by xUnit1030; suppress MA0004 here. -->
+    <NoWarn>$(NoWarn);MA0004</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" />
+    <Using Include="Xunit" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+  </ItemGroup>
+  <!-- The SMTP server the in-process host sends its email to, and a database of its own per test class. -->
+  <ItemGroup>
+    <Compile Include="..\MagicLink.NET.Tests\Mail\FakeSmtpServer.cs" Link="Mail\FakeSmtpServer.cs" />
+    <Compile Include="..\MagicLink.NET.Tests\Mail\Mime.cs" Link="Mail\Mime.cs" />
+    <Compile Include="..\MagicLink.NET.PostgreSql.Tests\PostgresDatabase.cs" Link="PostgresDatabase.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MagicLink.NET.Host\MagicLink.NET.Host.csproj" />
+  </ItemGroup>
+</Project>

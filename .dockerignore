@@ -1,0 +1,9 @@
+# Only what the image's build stage copies matters; keep build output and local state out of the context.
+**/bin/
+**/obj/
+.git/
+.claude/
+.superpowers/
+TestResults/
+artifacts/
+nupkg/

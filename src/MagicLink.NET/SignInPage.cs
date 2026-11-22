@@ -296,7 +296,7 @@ internal static partial class SignInPage
     }
 
     /// <summary>The posted form, or null when it is not a form or fails the antiforgery check.</summary>
-    private static async Task<IFormCollection?> ReadFormAsync(HttpContext context)
+    internal static async Task<IFormCollection?> ReadFormAsync(HttpContext context)
     {
         if (!context.Request.HasFormContentType)
         {
@@ -349,7 +349,7 @@ internal static partial class SignInPage
 
     private static IOpenIddictTokenManager Tokens(HttpContext context) => context.RequestServices.GetRequiredService<IOpenIddictTokenManager>();
 
-    private static IAntiforgery Antiforgery(HttpContext context) => context.RequestServices.GetRequiredService<IAntiforgery>();
+    internal static IAntiforgery Antiforgery(HttpContext context) => context.RequestServices.GetRequiredService<IAntiforgery>();
 
     private static int MaxAttempts(HttpContext context) => context.RequestServices.GetRequiredService<IOptions<MagicLinkOptions>>().Value.MaxCodeAttempts;
 

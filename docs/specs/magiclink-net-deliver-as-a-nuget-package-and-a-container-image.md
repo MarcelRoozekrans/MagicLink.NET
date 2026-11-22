@@ -33,6 +33,10 @@ An ASP.NET Core app hosts MagicLink.NET with `services.AddMagicLink(server => ..
 ## Open questions
 
 * *Is the package id* `MagicLink.NET` *free on nuget.org? A prefix reservation has been requested.*
+* *Where do the container's clients come from?* An app that hosts MagicLink.NET registers its applications in code, through OpenIddict. The container has no code of its own, so it reads them from its settings, `MagicLink__Clients__N__...`, and those settings are the full list: each start adds new clients, updates changed ones and removes the ones no longer listed, with their authorizations and tokens. Removing them keeps a client taken out of the settings from signing anyone in. A client gets the authorization code flow with PKCE when it has redirect URIs, the device flow of issue #24 with `DeviceFlow` set to `true`, and refresh tokens with the `offline_access` scope. Written down while building issue #12.
+* *Can the container read who may sign in from SQL Server?* Not yet. Microsoft.Data.SqlClient 7.1.2 gives trim warnings under Native AOT, so the container reads from a file or from PostgreSQL only. An app that hosts MagicLink.NET without Native AOT can still use SQL Server. Written down while building issue #12.
+* *Does the container run the `check-sign-in` command?* Yes, since issue #9 merged: when its arguments start with `check-sign-in`, the host runs the command on its built host instead of starting the server and exits with the command's code, as in `docker run magiclink-net check-sign-in ann@example.com`. It needs the same settings as the server.
+* *Which platforms does the image support?* The Dockerfile builds for linux-x64 only. An arm64 image needs a Native AOT build for that platform, on an arm64 runner or with a cross-compiler. Written down while building issue #12.
 
 ## Tasks
 

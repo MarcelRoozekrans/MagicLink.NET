@@ -191,9 +191,11 @@ jobs:
           echo "The native binary did not answer within 60 seconds." >&2
           exit 1
 
+      # The restart test runs the proof in-process on a database of its own on the same server.
       - name: Run the flow tests against the native binary
         env:
           MAGICLINK_AOT_PROOF_URL: http://127.0.0.1:5099
+          MAGICLINK_TEST_POSTGRES: "Host=localhost;Port=5432;Username=magiclink;Password=magiclink;Database=magiclink"
         run: dotnet test --project tests/MagicLink.NET.AotProof.Tests -c Release
 
       # The binary seeded the hourly pruning job at startup. Make that run due now and wait for the native worker to
@@ -215,6 +217,130 @@ jobs:
       - name: Show the native binary's log
         if: always()
         run: cat aot-proof.log || true
+
+  # The container image (issue #12): builds it from the Dockerfile, which publishes the host as Native AOT, starts it on
+  # PostgreSQL with every setting from environment variables, and runs the host's flow tests against it. The image is
+  # never pushed: releases are done by a person.
+  container-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: magiclink
+          POSTGRES_PASSWORD: magiclink
+          POSTGRES_DB: magiclink
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U magiclink"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      # An SMTP server with an API, where the tests read the sign-in email.
+      mailpit:
+        image: axllent/mailpit:v1.34
+        ports:
+          - 1025:1025
+          - 8025:8025
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - name: Build the image
+        run: docker build -t magiclink-net:ci .
+
+      # Certificates for this run only: signing and encrypting tokens, and serving HTTPS as localhost. The container's
+      # user must read them. The tests trust the HTTPS certificate next to the usual roots.
+      - name: Make certificates and the file of who may sign in
+        run: |
+          mkdir -p run
+          cd run
+          for name in signing encryption; do
+            usage=digitalSignature; [ "$name" = encryption ] && usage=keyEncipherment
+            openssl req -x509 -newkey rsa:2048 -nodes -keyout "$name.key" -out "$name.crt" -days 1 \
+              -subj "/CN=MagicLink.NET CI $name" -addext "keyUsage=critical,$usage"
+            openssl pkcs12 -export -inkey "$name.key" -in "$name.crt" -out "$name.pfx" -passout pass:ci
+          done
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout tls.key -out tls.crt -days 1 \
+            -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost"
+          openssl pkcs12 -export -inkey tls.key -in tls.crt -out tls.pfx -passout pass:ci
+          echo '{ "people": [ { "email": "host-person@example.com", "groups": ["host-users"] } ] }' > people.json
+          chmod 644 ./*.pfx people.json
+          cat /etc/ssl/certs/ca-certificates.crt tls.crt > trusted.crt
+          echo "MAGICLINK_HOST_SIGNING_THUMBPRINT=$(openssl x509 -in signing.crt -noout -fingerprint -sha1 | sed 's/.*=//; s/://g')" >> "$GITHUB_ENV"
+
+      # The same settings as the in-process host of the tests, in tests/MagicLink.NET.Host.Tests/TestSetup.cs.
+      - name: Start the container
+        run: |
+          docker run -d --name magiclink --network host -v "$PWD/run:/run/magiclink:ro" \
+            -e ASPNETCORE_URLS=https://+:5098 \
+            -e ASPNETCORE_Kestrel__Certificates__Default__Path=/run/magiclink/tls.pfx \
+            -e ASPNETCORE_Kestrel__Certificates__Default__Password=ci \
+            -e MagicLink__Issuer=https://localhost:5098/ \
+            -e "MagicLink__Store__ConnectionString=Host=localhost;Port=5432;Username=magiclink;Password=magiclink;Database=magiclink" \
+            -e MagicLink__SigningCertificate__Path=/run/magiclink/signing.pfx \
+            -e MagicLink__SigningCertificate__Password=ci \
+            -e MagicLink__EncryptionCertificate__Path=/run/magiclink/encryption.pfx \
+            -e MagicLink__EncryptionCertificate__Password=ci \
+            -e MagicLink__SignInFile__Path=/run/magiclink/people.json \
+            -e MagicLink__Smtp__Host=localhost \
+            -e MagicLink__Smtp__Port=1025 \
+            -e MagicLink__Smtp__UseStartTls=false \
+            -e "MagicLink__Smtp__From=Sign-in <signin@example.com>" \
+            -e MagicLink__Clients__0__ClientId=host-test-cli \
+            -e MagicLink__Clients__0__RedirectUris__0=http://localhost/callback \
+            -e MagicLink__Clients__0__Scopes__0=email \
+            -e MagicLink__Clients__0__Scopes__1=offline_access \
+            -e MagicLink__Clients__1__ClientId=host-test-web \
+            -e MagicLink__Clients__1__ClientSecret=host-test-secret \
+            -e MagicLink__Clients__1__RedirectUris__0=http://localhost/callback \
+            -e MagicLink__Clients__2__ClientId=host-test-device \
+            -e MagicLink__Clients__2__DeviceFlow=true \
+            -e MagicLink__Clients__2__Scopes__0=offline_access \
+            magiclink-net:ci
+          for i in $(seq 1 60); do
+            if [ "$(docker inspect -f '{{.State.Running}}' magiclink)" != "true" ]; then
+              echo "The container exited during startup." >&2; exit 1
+            fi
+            if curl -sf --cacert run/tls.crt https://localhost:5098/.well-known/openid-configuration > /dev/null; then
+              echo "The container answers."; exit 0
+            fi
+            sleep 1
+          done
+          echo "The container did not answer within 60 seconds." >&2
+          exit 1
+
+      - name: Run the flow tests against the container
+        env:
+          SSL_CERT_FILE: ${{ github.workspace }}/run/trusted.crt
+          MAGICLINK_HOST_URL: https://localhost:5098
+          MAGICLINK_HOST_ISSUER: https://localhost:5098/
+          MAGICLINK_HOST_MAILPIT_URL: http://localhost:8025
+        run: dotnet test --project tests/MagicLink.NET.Host.Tests -c Release -- --filter-class MagicLink.Host.Tests.FlowTests
+
+      # The image runs the check-sign-in command with its settings, without a shell: the chiseled image has none.
+      - name: Run check-sign-in in the container
+        run: |
+          docker exec magiclink ./MagicLink.NET.Host check-sign-in host-person@example.com
+          # 1 means the address may not sign in; 2 means the source could not answer, which proves nothing.
+          code=0
+          docker exec magiclink ./MagicLink.NET.Host check-sign-in outsider@example.com || code=$?
+          if [ "$code" != 1 ]; then
+            echo "check-sign-in for an address that is not listed exited with $code, not 1." >&2; exit 1
+          fi
+
+      - name: Show the container's log
+        if: always()
+        run: docker logs magiclink || true
 
   commitlint:
     if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-commitlint')

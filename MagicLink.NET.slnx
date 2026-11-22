@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/MagicLink.NET/MagicLink.NET.csproj" />
+    <Project Path="src/MagicLink.NET.Host/MagicLink.NET.Host.csproj" />
     <Project Path="src/MagicLink.NET.PostgreSql/MagicLink.NET.PostgreSql.csproj" />
   </Folder>
   <Folder Name="/samples/">
@@ -8,6 +9,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MagicLink.NET.AotProof.Tests/MagicLink.NET.AotProof.Tests.csproj" />
+    <Project Path="tests/MagicLink.NET.Host.Tests/MagicLink.NET.Host.Tests.csproj" />
     <Project Path="tests/MagicLink.NET.PostgreSql.Tests/MagicLink.NET.PostgreSql.Tests.csproj" />
     <Project Path="tests/MagicLink.NET.Tests/MagicLink.NET.Tests.csproj" />
   </Folder>
