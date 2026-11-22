@@ -40,6 +40,8 @@ The image is a thin host around the same packages, published as a Native AOT bin
 docker build -t magiclink-net .
 ```
 
+It builds for the machine it runs on, linux/amd64 or linux/arm64. Native AOT does not cross-compile between the two, so build an arm64 image on an arm64 machine.
+
 Every setting comes from an environment variable, or from an `appsettings.json` mounted in `/app`. The container listens on port 8080 and runs as a user without root rights, so mounted files must be readable for it.
 
 | Variable | What it sets |
