@@ -53,6 +53,8 @@ Every setting comes from an environment variable, or from an `appsettings.json` 
 | `MagicLink__Smtp__Host`, `__Port`, `__UseStartTls`, `__UserName`, `__Password`, `__From`, `__Subject` | The SMTP server that sends the sign-in email. |
 | `MagicLink__CodeLifetime`, `MagicLink__MaxCodeAttempts` | How long a code works, `00:10:00` by default, and how often it may be tried, 5 by default. |
 | `MagicLink__MaxEmailsPerAddress`, `MagicLink__EmailLimitWindow` | How many sign-in emails one address gets, 5 by default, within a window of `00:15:00` by default. |
+| `MagicLink__MaxSignInsPerClient`, `MagicLink__ClientLimitWindow` | How many sign-ins one client IP address starts, for any addresses, 20 by default, within a window of `00:15:00` by default. An IPv6 address counts by its /64 network. |
+| `MagicLink__ForwardedHeaders__KnownProxies__0`, `MagicLink__ForwardedHeaders__KnownNetworks__0` | The reverse proxies whose `X-Forwarded-For` and `X-Forwarded-Proto` headers are trusted, as IP addresses or as networks such as `10.0.0.0/8`. Behind a proxy, set them, or every person counts as the proxy against the per-client limit. |
 | `MagicLink__Clients__0__ClientId` | An application that may sign people in. Number the clients from 0. |
 | `MagicLink__Clients__0__RedirectUris__0` | Where MagicLink.NET sends the person back to with the code: an https address, or http on localhost or a loopback address. Number them from 0. |
 | `MagicLink__Clients__0__DeviceFlow` | `true` for a CLI that signs in with the device flow: the person types a user code in a browser. A client needs redirect URIs, the device flow, or both. |

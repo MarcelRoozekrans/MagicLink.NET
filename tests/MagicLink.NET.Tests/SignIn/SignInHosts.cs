@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Claims;
 using System.Text.Json;
 using MagicLink.PostgreSql.Tests;
@@ -80,6 +81,12 @@ public class SignInHosts : IAsyncLifetime
 
     /// <summary>How many sign-in emails an address gets in the window, or null for the default.</summary>
     protected virtual int? MaxEmailsPerAddress => 1_000;
+
+    /// <summary>
+    /// The IP address MagicLink.NET sees requests come from, or null for none, as a test server in memory gives, which the
+    /// per-client sign-in limit does not count.
+    /// </summary>
+    internal IPAddress? ClientAddress { get; set; }
 
     /// <summary>What MagicLink.NET logged.</summary>
     internal ListLoggerProvider Logs { get; } = new();
@@ -204,6 +211,11 @@ public class SignInHosts : IAsyncLifetime
         }
 
         var app = builder.Build();
+        app.Use((context, next) =>
+        {
+            context.Connection.RemoteIpAddress = ClientAddress;
+            return next(context);
+        });
         app.UseAuthentication();
         app.MapMagicLinkEndpoints();
         return app;

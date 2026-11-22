@@ -27,4 +27,16 @@ public sealed class MagicLinkOptionsTests
     {
         Assert.Equal(TimeSpan.FromMinutes(15), new MagicLinkOptions().EmailLimitWindow);
     }
+
+    [Fact]
+    public void MaxSignInsPerClient_DefaultsTo20()
+    {
+        Assert.Equal(20, new MagicLinkOptions().MaxSignInsPerClient);
+    }
+
+    [Fact]
+    public void ClientLimitWindow_DefaultsTo15Minutes()
+    {
+        Assert.Equal(TimeSpan.FromMinutes(15), new MagicLinkOptions().ClientLimitWindow);
+    }
 }

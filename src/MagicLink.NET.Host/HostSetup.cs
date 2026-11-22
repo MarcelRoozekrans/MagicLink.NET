@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.AspNetCore.WebUtilities;
@@ -13,8 +14,12 @@ namespace MagicLink.Host;
 /// </summary>
 internal sealed class HostSetup
 {
-    private HostSetup(HostConfiguration configuration, Uri issuer, X509Certificate2 signing, X509Certificate2 encryption, IReadOnlyList<OpenIddictApplicationDescriptor> clients)
+    private HostSetup(
+        HostConfiguration configuration, Uri issuer, X509Certificate2 signing, X509Certificate2 encryption,
+        IReadOnlyList<OpenIddictApplicationDescriptor> clients, IReadOnlyList<IPAddress> proxies, IReadOnlyList<IPNetwork> proxyNetworks)
     {
+        TrustedProxies = proxies;
+        TrustedProxyNetworks = proxyNetworks;
         Configuration = configuration;
         Issuer = issuer;
         SigningCertificate = signing;
@@ -37,6 +42,15 @@ internal sealed class HostSetup
     /// <summary>The applications that may sign people in, as OpenIddict registers them.</summary>
     public IReadOnlyList<OpenIddictApplicationDescriptor> Clients { get; }
 
+    /// <summary>The proxies whose forwarded headers are trusted.</summary>
+    public IReadOnlyList<IPAddress> TrustedProxies { get; }
+
+    /// <summary>The networks of proxies whose forwarded headers are trusted.</summary>
+    public IReadOnlyList<IPNetwork> TrustedProxyNetworks { get; }
+
+    /// <summary>Whether any proxy is trusted, so the forwarded headers are applied.</summary>
+    public bool TrustsProxies => TrustedProxies.Count > 0 || TrustedProxyNetworks.Count > 0;
+
     /// <summary>Whether who may sign in comes from a database rather than a file.</summary>
     public bool UsesSignInDatabase => HasDatabase(Configuration.SignInDatabase);
 
@@ -56,6 +70,8 @@ internal sealed class HostSetup
         var encryption = ReadCertificate(configuration.EncryptionCertificate, "EncryptionCertificate", "encrypt tokens", problems);
         CheckSource(configuration, problems);
         var clients = ReadClients(configuration.Clients, problems);
+        var proxies = ReadProxies(configuration.ForwardedHeaders.KnownProxies, problems);
+        var proxyNetworks = ReadProxyNetworks(configuration.ForwardedHeaders.KnownNetworks, problems);
 
         if (problems.Count > 0)
         {
@@ -64,7 +80,43 @@ internal sealed class HostSetup
             return Result<HostSetup>.Failure("MagicLink.NET cannot start:" + string.Concat(problems.Select(static problem => Environment.NewLine + "- " + problem)));
         }
 
-        return Result<HostSetup>.Success(new HostSetup(configuration, issuer!, signing!, encryption!, clients));
+        return Result<HostSetup>.Success(new HostSetup(configuration, issuer!, signing!, encryption!, clients, proxies, proxyNetworks));
+    }
+
+    private static List<IPAddress> ReadProxies(List<string> values, List<string> problems)
+    {
+        var proxies = new List<IPAddress>();
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (IPAddress.TryParse(values[i], out var proxy))
+            {
+                proxies.Add(proxy);
+            }
+            else
+            {
+                problems.Add($"MagicLink__ForwardedHeaders__KnownProxies__{i} must be an IP address, such as 10.0.0.5, not '{values[i]}'.");
+            }
+        }
+
+        return proxies;
+    }
+
+    private static List<IPNetwork> ReadProxyNetworks(List<string> values, List<string> problems)
+    {
+        var networks = new List<IPNetwork>();
+        for (var i = 0; i < values.Count; i++)
+        {
+            if (IPNetwork.TryParse(values[i], out var network))
+            {
+                networks.Add(network);
+            }
+            else
+            {
+                problems.Add($"MagicLink__ForwardedHeaders__KnownNetworks__{i} must be a network in CIDR notation, such as 10.0.0.0/8, not '{values[i]}'.");
+            }
+        }
+
+        return networks;
     }
 
     private static Uri? ReadIssuer(string? value, List<string> problems)

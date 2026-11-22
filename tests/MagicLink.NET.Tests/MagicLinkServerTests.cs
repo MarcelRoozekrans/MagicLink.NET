@@ -21,11 +21,14 @@ public sealed class MagicLinkServerTests
     }
 
     [Theory]
-    [InlineData(0, 5, 5, 15, "CodeLifetime")]
-    [InlineData(10, 0, 5, 15, "MaxCodeAttempts")]
-    [InlineData(10, 5, 0, 15, "MaxEmailsPerAddress")]
-    [InlineData(10, 5, 5, 0, "EmailLimitWindow")]
-    public async Task MagicLink_does_not_start_with_settings_that_lock_everyone_out(int lifetimeMinutes, int attempts, int emails, int windowMinutes, string setting)
+    [InlineData(0, 5, 5, 15, 20, 15, "CodeLifetime")]
+    [InlineData(10, 0, 5, 15, 20, 15, "MaxCodeAttempts")]
+    [InlineData(10, 5, 0, 15, 20, 15, "MaxEmailsPerAddress")]
+    [InlineData(10, 5, 5, 0, 20, 15, "EmailLimitWindow")]
+    [InlineData(10, 5, 5, 15, 0, 15, "MaxSignInsPerClient")]
+    [InlineData(10, 5, 5, 15, 20, 0, "ClientLimitWindow")]
+    public async Task MagicLink_does_not_start_with_settings_that_lock_everyone_out(
+        int lifetimeMinutes, int attempts, int emails, int windowMinutes, int signIns, int clientWindowMinutes, string setting)
     {
         await using var app = Build(new Uri("https://magiclink.test/"), options =>
         {
@@ -33,6 +36,8 @@ public sealed class MagicLinkServerTests
             options.MaxCodeAttempts = attempts;
             options.MaxEmailsPerAddress = emails;
             options.EmailLimitWindow = TimeSpan.FromMinutes(windowMinutes);
+            options.MaxSignInsPerClient = signIns;
+            options.ClientLimitWindow = TimeSpan.FromMinutes(clientWindowMinutes);
         });
 
         var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => app.StartAsync(TestContext.Current.CancellationToken));

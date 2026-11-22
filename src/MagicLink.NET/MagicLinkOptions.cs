@@ -25,4 +25,20 @@ public sealed class MagicLinkOptions
     /// The sliding window <see cref="MaxEmailsPerAddress"/> counts in. Defaults to 15 minutes.
     /// </summary>
     public TimeSpan EmailLimitWindow { get; set; } = TimeSpan.FromMinutes(15);
+
+    /// <summary>
+    /// How many sign-ins one client IP address starts within <see cref="ClientLimitWindow"/>, for any addresses, known or
+    /// not. Beyond that the sign-in page answers as always, but sends no email, so nobody can mail or probe many
+    /// addresses from one machine. An IPv6 address counts by its /64 network. Defaults to 20.
+    /// </summary>
+    /// <remarks>
+    /// The client's address is the connection's remote address. Behind a reverse proxy, the host must apply the
+    /// forwarded headers of the proxies it trusts, or every person counts as the proxy.
+    /// </remarks>
+    public int MaxSignInsPerClient { get; set; } = 20;
+
+    /// <summary>
+    /// The sliding window <see cref="MaxSignInsPerClient"/> counts in. Defaults to 15 minutes.
+    /// </summary>
+    public TimeSpan ClientLimitWindow { get; set; } = TimeSpan.FromMinutes(15);
 }

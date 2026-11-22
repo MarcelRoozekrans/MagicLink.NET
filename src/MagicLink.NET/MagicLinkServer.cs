@@ -45,6 +45,8 @@ internal static class MagicLinkServer
             .Validate(static options => options.MaxCodeAttempts > 0, "MagicLinkOptions.MaxCodeAttempts must be at least 1.")
             .Validate(static options => options.MaxEmailsPerAddress > 0, "MagicLinkOptions.MaxEmailsPerAddress must be at least 1.")
             .Validate(static options => options.EmailLimitWindow > TimeSpan.Zero, "MagicLinkOptions.EmailLimitWindow must be positive.")
+            .Validate(static options => options.MaxSignInsPerClient > 0, "MagicLinkOptions.MaxSignInsPerClient must be at least 1.")
+            .Validate(static options => options.ClientLimitWindow > TimeSpan.Zero, "MagicLinkOptions.ClientLimitWindow must be positive.")
             .Validate<IServiceProviderIsService>(
                 static (_, services) => services.IsService(typeof(ISignInSource)),
                 "MagicLink.NET needs a source of who may sign in, for example a file with AddMagicLinkSignInFile: without one it cannot tell who may sign in.")
@@ -128,6 +130,7 @@ internal static class MagicLinkServer
     {
         services.TryAddSingleton<SignInMailQueue>();
         services.TryAddSingleton<SignInMailLimit>();
+        services.TryAddSingleton<SignInClientLimit>();
         services.AddSignInMailDeliveryResiliencePolicies();
         services.AddHostedService<SignInMailWorker>();
         services.TryAddSingleton<ISignInMessageSender, SmtpSignInMessageSender>();

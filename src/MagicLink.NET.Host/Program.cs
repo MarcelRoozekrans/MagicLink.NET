@@ -1,4 +1,5 @@
 using MagicLink;
+using Microsoft.AspNetCore.HttpOverrides;
 using MagicLink.Host;
 using Npgsql;
 
@@ -47,6 +48,26 @@ else
 }
 
 builder.Services.Configure<MagicLinkOptions>(section);
+
+// Behind a reverse proxy, the client's IP address, which the per-client sign-in limit counts, comes from the
+// X-Forwarded-For header, but only from the proxies the settings trust; without any, from the connection (spec "confirm
+// sign-in with a link or a code", criterion 8).
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = null;
+    options.KnownProxies.Clear();
+    options.KnownIPNetworks.Clear();
+    foreach (var proxy in host.TrustedProxies)
+    {
+        options.KnownProxies.Add(proxy);
+    }
+
+    foreach (var network in host.TrustedProxyNetworks)
+    {
+        options.KnownIPNetworks.Add(network);
+    }
+});
 builder.Services.Configure<MagicLinkSmtpOptions>(section.GetSection("Smtp"));
 
 // Registered after the store, so its migrations have run when the clients are registered.
@@ -59,6 +80,11 @@ var app = builder.Build();
 if (await CheckSignInCommand.TryRunAsync(app.Services, args, Console.Out, CancellationToken.None).ConfigureAwait(false) is { } exitCode)
 {
     return exitCode;
+}
+
+if (host.TrustsProxies)
+{
+    app.UseForwardedHeaders();
 }
 
 app.MapMagicLink();

@@ -39,6 +39,8 @@ public sealed class StartupTests : IDisposable
     [InlineData("MagicLink:Clients:0:RedirectUris:0", "http://localhost/callback?iss=https://other.example/", "MagicLink__Clients__0__RedirectUris__0")]
     [InlineData("MagicLink:Clients:0:Scopes:0", "profile", "MagicLink__Clients__0__Scopes__0")]
     [InlineData("MagicLink:Clients:1:ClientId", TestSetup.PublicClient, "MagicLink__Clients__1__ClientId")]
+    [InlineData("MagicLink:ForwardedHeaders:KnownProxies:0", "proxy.example", "MagicLink__ForwardedHeaders__KnownProxies__0")]
+    [InlineData("MagicLink:ForwardedHeaders:KnownNetworks:0", "10.0.0.0", "MagicLink__ForwardedHeaders__KnownNetworks__0")]
     public void A_wrong_setting_stops_the_host_and_is_named(string key, string value, string named)
     {
         var settings = _setup.Settings(UnusedStore, smtpPort: 25);
