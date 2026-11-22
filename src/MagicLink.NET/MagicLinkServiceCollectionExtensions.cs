@@ -35,18 +35,26 @@ public static class MagicLinkServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(configure);
 
         var builder = services.AddOpenIddict().AddMagicLinkServer(configure);
-        services.PostConfigure<AuthenticationOptions>(KeepTheAppsDefaultScheme);
+        services.PostConfigure<AuthenticationOptions>(static options => KeepTheAppsDefaultScheme(options, AutoDefaultSuppressed()));
         return builder;
     }
+
+    /// <summary>The AppContext switch with which an app turns ASP.NET Core's implicit default scheme off.</summary>
+    internal const string SuppressAutoDefaultSchemeSwitch = "Microsoft.AspNetCore.Authentication.SuppressAutoDefaultScheme";
+
+    private static bool AutoDefaultSuppressed() => AppContext.TryGetSwitch(SuppressAutoDefaultSchemeSwitch, out var suppressed) && suppressed;
 
     /// <summary>
     /// ASP.NET Core makes an app's only scheme its default without the app naming it. MagicLink.NET adds two schemes of
     /// its own, its session and OpenIddict's, which would take that default away; this gives it back. A default the app
-    /// set itself is left alone, and so is an app with more schemes, which had no implicit default before.
+    /// set itself is left alone, and so is an app with more schemes, which had no implicit default before, and an app that
+    /// switched the implicit default off with <see cref="SuppressAutoDefaultSchemeSwitch"/>.
     /// </summary>
-    private static void KeepTheAppsDefaultScheme(AuthenticationOptions options)
+    /// <param name="options">The app's authentication options.</param>
+    /// <param name="autoDefaultSuppressed">Whether the app switched ASP.NET Core's implicit default off.</param>
+    internal static void KeepTheAppsDefaultScheme(AuthenticationOptions options, bool autoDefaultSuppressed)
     {
-        if (options.DefaultScheme is not null)
+        if (autoDefaultSuppressed || options.DefaultScheme is not null)
         {
             return;
         }

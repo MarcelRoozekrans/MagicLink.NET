@@ -40,6 +40,20 @@ public sealed class HostingArgumentTests
     public void An_app_without_schemes_of_its_own_gets_no_default() =>
         Assert.Null(DefaultScheme(static _ => { }));
 
+    [Fact]
+    public void An_app_that_switched_the_implicit_default_off_gets_none()
+    {
+        // The AppContext switch is process-wide, so the rule is called with it rather than the switch set for every test.
+        var options = new AuthenticationOptions();
+        options.AddScheme("own", static scheme => scheme.HandlerType = typeof(Microsoft.AspNetCore.Authentication.Cookies.CookieAuthenticationHandler));
+
+        MagicLinkServiceCollectionExtensions.KeepTheAppsDefaultScheme(options, autoDefaultSuppressed: true);
+        Assert.Null(options.DefaultScheme);
+
+        MagicLinkServiceCollectionExtensions.KeepTheAppsDefaultScheme(options, autoDefaultSuppressed: false);
+        Assert.Equal("own", options.DefaultScheme);
+    }
+
     private static string? DefaultScheme(Action<AuthenticationBuilder> app)
     {
         var services = new ServiceCollection();
