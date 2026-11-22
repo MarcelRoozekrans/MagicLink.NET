@@ -82,6 +82,24 @@ public sealed class ClientRegistrationTests(PostgresDatabase database) : IClassF
     }
 
     [Fact]
+    public async Task A_device_client_gets_the_device_flow_and_not_the_browser_flow()
+    {
+        var services = await StartAsync(_setup.Settings(database.ConnectionString, smtpPort: 25));
+
+        await using var scope = services.CreateAsyncScope();
+        var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+        var device = await manager.FindByClientIdAsync(TestSetup.DeviceClient, Cancel);
+        Assert.NotNull(device);
+        Assert.True(await manager.HasPermissionAsync(device, Permissions.Endpoints.DeviceAuthorization, Cancel));
+        Assert.True(await manager.HasPermissionAsync(device, Permissions.GrantTypes.DeviceCode, Cancel));
+        Assert.True(await manager.HasPermissionAsync(device, Permissions.GrantTypes.RefreshToken, Cancel));
+        Assert.False(await manager.HasPermissionAsync(device, Permissions.Endpoints.Authorization, Cancel));
+        Assert.False(await manager.HasPermissionAsync(device, Permissions.GrantTypes.AuthorizationCode, Cancel));
+        var cli = await manager.FindByClientIdAsync(TestSetup.PublicClient, Cancel);
+        Assert.False(await manager.HasPermissionAsync(cli!, Permissions.GrantTypes.DeviceCode, Cancel));
+    }
+
+    [Fact]
     public async Task A_changed_secret_replaces_the_old_one()
     {
         var first = _setup.Settings(database.ConnectionString, smtpPort: 25);

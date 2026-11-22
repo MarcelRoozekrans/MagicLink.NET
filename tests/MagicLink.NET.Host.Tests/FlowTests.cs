@@ -88,6 +88,41 @@ public sealed class FlowTests(HostUnderTest host) : IClassFixture<HostUnderTest>
     }
 
     [Fact]
+    public async Task A_configured_device_client_signs_a_person_in_with_a_user_code()
+    {
+        using var deviceRequest = new FormUrlEncodedContent(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["client_id"] = TestSetup.DeviceClient,
+            ["scope"] = "openid offline_access",
+        });
+        using var deviceResponse = await Client.PostAsync("/connect/device", deviceRequest, Cancel);
+        Assert.Equal(HttpStatusCode.OK, deviceResponse.StatusCode);
+        using var device = await ReadJson(deviceResponse);
+        var grant = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
+            ["client_id"] = TestSetup.DeviceClient,
+            ["device_code"] = device.RootElement.GetProperty("device_code").GetString()!,
+        };
+
+        // The person opens the verification page in a browser, signs in there, and types the user code the CLI shows.
+        var browser = new TestBrowser(Client);
+        using var verifyForm = await SignInAsync(browser, "/connect/verify");
+        Assert.Equal(HttpStatusCode.OK, verifyForm.StatusCode);
+        using (var approved = await browser.SubmitFormAsync(verifyForm, ("user_code", device.RootElement.GetProperty("user_code").GetString()!)))
+        {
+            Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+            using var done = await browser.NavigateAsync(TestBrowser.PathOf(approved.Headers.Location!));
+            Assert.Equal(HttpStatusCode.OK, done.StatusCode);
+        }
+
+        using var tokens = await ReadJson(await PostToken(grant));
+        using var access = Payload(tokens.RootElement.GetProperty("access_token").GetString()!);
+        Assert.Equal(TestSetup.Person, access.RootElement.GetProperty("sub").GetString());
+        Assert.True(tokens.RootElement.TryGetProperty("refresh_token", out _));
+    }
+
+    [Fact]
     public async Task A_client_that_is_not_configured_gets_no_code()
     {
         using var response = await Client.GetAsync(AuthorizeUri("not-configured", Challenge(NewVerifier()), "openid"), Cancel);
@@ -117,7 +152,23 @@ public sealed class FlowTests(HostUnderTest host) : IClassFixture<HostUnderTest>
     private async Task<string> AuthorizeAsync(string clientId, string verifier, string scope)
     {
         var browser = new TestBrowser(Client);
-        using var emailForm = await browser.NavigateAsync(AuthorizeUri(clientId, Challenge(verifier), scope));
+        using var response = await SignInAsync(browser, AuthorizeUri(clientId, Challenge(verifier), scope));
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var location = response.Headers.Location!;
+        Assert.StartsWith(TestSetup.RedirectUri, location.AbsoluteUri, StringComparison.Ordinal);
+        var query = QueryHelpers.ParseQuery(location.Query);
+        Assert.Equal("host-state", query["state"].ToString());
+        return query["code"].ToString();
+    }
+
+    /// <summary>
+    /// Opens <paramref name="path"/> in <paramref name="browser"/>, which the host sends to its sign-in page; the person
+    /// types their address and then the code from the email, and the browser goes back to where it started. Returns that
+    /// last answer.
+    /// </summary>
+    private async Task<HttpResponseMessage> SignInAsync(TestBrowser browser, string path)
+    {
+        using var emailForm = await browser.NavigateAsync(path);
         Assert.Equal(HttpStatusCode.OK, emailForm.StatusCode);
 
         var sentBefore = (await host.Mailbox.ReadAsync(TestSetup.Person)).Count;
@@ -131,13 +182,7 @@ public sealed class FlowTests(HostUnderTest host) : IClassFixture<HostUnderTest>
         using var confirmed = await browser.SubmitFormAsync(codeForm, ("code", mailCode));
         Assert.Equal(HttpStatusCode.Redirect, confirmed.StatusCode);
 
-        using var response = await browser.NavigateAsync(TestBrowser.PathOf(confirmed.Headers.Location!));
-        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        var location = response.Headers.Location!;
-        Assert.StartsWith(TestSetup.RedirectUri, location.AbsoluteUri, StringComparison.Ordinal);
-        var query = QueryHelpers.ParseQuery(location.Query);
-        Assert.Equal("host-state", query["state"].ToString());
-        return query["code"].ToString();
+        return await browser.NavigateAsync(TestBrowser.PathOf(confirmed.Headers.Location!));
     }
 
     private Task<HttpResponseMessage> RedeemAsync(string clientId, string? secret, string code, string verifier)

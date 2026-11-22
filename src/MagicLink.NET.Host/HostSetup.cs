@@ -169,19 +169,22 @@ internal sealed class HostSetup
             ClientSecret = confidential ? client.ClientSecret : null,
             ClientType = confidential ? ClientTypes.Confidential : ClientTypes.Public,
             DisplayName = string.IsNullOrWhiteSpace(client.DisplayName) ? null : client.DisplayName,
-            Permissions =
-            {
-                Permissions.Endpoints.Authorization,
-                Permissions.Endpoints.Token,
-                Permissions.GrantTypes.AuthorizationCode,
-                Permissions.ResponseTypes.Code,
-            },
-            Requirements = { Requirements.Features.ProofKeyForCodeExchange },
+            Permissions = { Permissions.Endpoints.Token },
         };
 
-        if (client.RedirectUris.Count == 0)
+        if (client.RedirectUris.Count > 0)
         {
-            problems.Add($"Set {prefix}RedirectUris__0 to the address MagicLink.NET sends the person back to with the authorization code.");
+            descriptor.Permissions.UnionWith([Permissions.Endpoints.Authorization, Permissions.GrantTypes.AuthorizationCode, Permissions.ResponseTypes.Code]);
+            descriptor.Requirements.Add(Requirements.Features.ProofKeyForCodeExchange);
+        }
+        else if (!client.DeviceFlow)
+        {
+            problems.Add($"Set {prefix}RedirectUris__0 to the address MagicLink.NET sends the person back to with the authorization code, or {prefix}DeviceFlow to true for a CLI that signs in with a user code.");
+        }
+
+        if (client.DeviceFlow)
+        {
+            descriptor.Permissions.UnionWith([Permissions.Endpoints.DeviceAuthorization, Permissions.GrantTypes.DeviceCode]);
         }
 
         for (var index = 0; index < client.RedirectUris.Count; index++)

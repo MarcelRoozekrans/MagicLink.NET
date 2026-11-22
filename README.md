@@ -54,6 +54,7 @@ Every setting comes from an environment variable, or from an `appsettings.json` 
 | `MagicLink__CodeLifetime`, `MagicLink__MaxCodeAttempts` | How long a code works, `00:10:00` by default, and how often it may be tried, 5 by default. |
 | `MagicLink__Clients__0__ClientId` | An application that may sign people in. Number the clients from 0. |
 | `MagicLink__Clients__0__RedirectUris__0` | Where MagicLink.NET sends the person back to with the code. Number them from 0. |
+| `MagicLink__Clients__0__DeviceFlow` | `true` for a CLI that signs in with the device flow: the person types a user code in a browser. A client needs redirect URIs, the device flow, or both. |
 | `MagicLink__Clients__0__ClientSecret` | The secret of a web app with a server side. Without it the client is public, such as a CLI, and proves itself with PKCE. |
 | `MagicLink__Clients__0__Scopes__0` | `email`, and `offline_access` for refresh tokens. Every client may ask for `openid`. |
 | `MagicLink__Clients__0__DisplayName` | The name of the application, for people. |

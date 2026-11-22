@@ -15,8 +15,17 @@ internal sealed class ClientSettings
     /// <summary>The name of the application, for people.</summary>
     public string? DisplayName { get; set; }
 
-    /// <summary>The addresses MagicLink.NET may send the person back to with the authorization code.</summary>
+    /// <summary>
+    /// The addresses MagicLink.NET may send the person back to with the authorization code. A client with at least one
+    /// uses the authorization code flow with PKCE.
+    /// </summary>
     public List<string> RedirectUris { get; set; } = [];
+
+    /// <summary>
+    /// Whether the client may sign in with the device flow, as a CLI does: the person types a user code in a browser. A
+    /// client may use the device flow, the authorization code flow, or both.
+    /// </summary>
+    public bool DeviceFlow { get; set; }
 
     /// <summary>
     /// The scopes the application may ask for besides <c>openid</c>: <c>email</c>, and <c>offline_access</c> for refresh

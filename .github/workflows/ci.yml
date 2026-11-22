@@ -303,6 +303,9 @@ jobs:
             -e MagicLink__Clients__1__ClientId=host-test-web \
             -e MagicLink__Clients__1__ClientSecret=host-test-secret \
             -e MagicLink__Clients__1__RedirectUris__0=http://localhost/callback \
+            -e MagicLink__Clients__2__ClientId=host-test-device \
+            -e MagicLink__Clients__2__DeviceFlow=true \
+            -e MagicLink__Clients__2__Scopes__0=offline_access \
             magiclink-net:ci
           for i in $(seq 1 60); do
             if [ "$(docker inspect -f '{{.State.Running}}' magiclink)" != "true" ]; then

@@ -16,6 +16,9 @@ internal sealed class TestSetup : IDisposable
 
     public const string ClientSecret = "host-test-secret";
 
+    /// <summary>A CLI that signs in with the device flow only, without a redirect URI.</summary>
+    public const string DeviceClient = "host-test-device";
+
     public const string RedirectUri = "http://localhost/callback";
 
     /// <summary>The person the file lets sign in, with <see cref="Group"/>.</summary>
@@ -67,6 +70,9 @@ internal sealed class TestSetup : IDisposable
         ["MagicLink:Clients:1:ClientId"] = ConfidentialClient,
         ["MagicLink:Clients:1:ClientSecret"] = ClientSecret,
         ["MagicLink:Clients:1:RedirectUris:0"] = RedirectUri,
+        ["MagicLink:Clients:2:ClientId"] = DeviceClient,
+        ["MagicLink:Clients:2:DeviceFlow"] = "true",
+        ["MagicLink:Clients:2:Scopes:0"] = "offline_access",
     };
 
     public static void WritePeople(string path, string email, string group) =>
