@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.2.0](https://github.com/MarcelRoozekrans/MagicLink.NET/compare/v0.1.2...v0.2.0) (2026-11-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* footer, and its title carries the ! as well, because a squash merge makes the title the commit on main. Removing suppressions needs no marker. The workflow also runs on title edits.
+
+### Continuous Integration
+
+* validate the public API against the last release ([952978a](https://github.com/MarcelRoozekrans/MagicLink.NET/commit/952978a5a99daa4879717464214768b486ea40be)), closes [#27](https://github.com/MarcelRoozekrans/MagicLink.NET/issues/27)
+
 ## [0.1.2](https://github.com/MarcelRoozekrans/MagicLink.NET/compare/v0.1.1...v0.1.2) (2026-11-22)
 
 
