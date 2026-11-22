@@ -1,0 +1,39 @@
+name: api-compat
+
+# An API compatibility suppression accepts a break of the public API (product-line ADR-252, issue
+# #27). release-please takes the version from the commits, and a squash merge makes the pull request
+# title the commit on main, so a pull request that adds or extends a suppression needs a commit and
+# a title marked as breaking. Editing only the title has to re-run the check, hence `edited`.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  breaking-suppression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Test the check
+        run: bash .github/scripts/check-breaking-suppression.test.sh
+
+      # The title is text anyone opening a pull request chooses: it reaches the script through the
+      # environment, never as an expression inside the shell source.
+      - name: Require a breaking commit and title for a new suppression
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash .github/scripts/check-breaking-suppression.sh "$BASE_SHA" "$HEAD_SHA" "$TITLE"

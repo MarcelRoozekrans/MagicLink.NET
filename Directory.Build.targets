@@ -1,0 +1,70 @@
+<Project>
+  <!--
+    Package validation against the last release (product-line ADR-252, issue #27).
+
+    Pack compares a package's public API with the version that was last released, when a baselines
+    file is passed in: -p:MagicLinkApiBaselines=/absolute/path/api-baselines.props. The file comes
+    from .github/scripts/api-baselines.sh and sets PackageValidationBaselineVersion for each package
+    that has a release. Without it nothing here runs, so local builds and packs work as before.
+
+    A deliberate break after 1.0 is accepted with the CompatibilitySuppressions.xml the SDK writes
+    beside the csproj, together with a commit marked as breaking; the api-compat workflow checks
+    that pairing. To write the file, look up the baselines and pack with them, at the version CI
+    packs, the patch after the one in .release-please-manifest.json:
+
+      printf 'MagicLink.NET\nMagicLink.NET.PostgreSql\n' \
+        | .github/scripts/api-baselines.sh 1.2.4-ci "$PWD/artifacts/api-baselines.props"
+      dotnet pack -c Release -p:Version=1.2.4-ci -o artifacts/nupkg \
+        -p:MagicLinkApiBaselines="$PWD/artifacts/api-baselines.props" \
+        -p:ApiCompatGenerateSuppressionFile=true
+
+    A suppression that no longer matches stays an error, so once the release with the break is the
+    baseline the file has to go, and an old entry cannot hide a later break.
+
+    While the baseline is below 1.0, SemVer allows a break in any release, so a break is reported
+    as a warning instead of failing the pack: validation writes what it found to a file under obj/
+    instead of failing, and the target below turns each entry into an MLAPI001 warning. That file
+    replaces the suppression output, so a committed CompatibilitySuppressions.xml is never rewritten.
+  -->
+  <Import Project="$(MagicLinkApiBaselines)" Condition="'$(MagicLinkApiBaselines)' != ''" />
+
+  <PropertyGroup Condition="'$(PackageValidationBaselineVersion)' != ''">
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <!-- Off by default in the SDK. A renamed parameter breaks callers that use named arguments. -->
+    <ApiCompatEnableRuleCannotChangeParameterName>true</ApiCompatEnableRuleCannotChangeParameterName>
+    <MagicLinkApiReportOnly Condition="$(PackageValidationBaselineVersion.StartsWith('0.'))">true</MagicLinkApiReportOnly>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MagicLinkApiReportOnly)' == 'true'">
+    <ApiCompatGenerateSuppressionFile>true</ApiCompatGenerateSuppressionFile>
+    <ApiCompatSuppressionOutputFile>$(MSBuildProjectDirectory)/$(IntermediateOutputPath)api-compat-report.xml</ApiCompatSuppressionOutputFile>
+  </PropertyGroup>
+
+  <!--
+    Validation writes the report only when it finds a break, so an old report would outlive the fix.
+    It is removed first, together with the marker that lets the SDK skip validation of an unchanged
+    package, so every pack reports what that pack found.
+  -->
+  <Target Name="MagicLinkClearApiReport"
+          BeforeTargets="RunPackageValidation"
+          Condition="'$(MagicLinkApiReportOnly)' == 'true'">
+    <Delete Files="$(ApiCompatSuppressionOutputFile);$(_ApiCompatValidatePackageSemaphoreFile)" />
+  </Target>
+
+  <Target Name="MagicLinkReportApiBreaks"
+          AfterTargets="RunPackageValidation"
+          Condition="'$(MagicLinkApiReportOnly)' == 'true' and '$(EnablePackageValidation)' == 'true' and '$(IsPackable)' == 'true'">
+    <XmlPeek XmlInputPath="$(ApiCompatSuppressionOutputFile)"
+             Query="/Suppressions/Suppression"
+             Condition="Exists('$(ApiCompatSuppressionOutputFile)')">
+      <Output TaskParameter="Result" ItemName="_MagicLinkApiBreak" />
+    </XmlPeek>
+    <!-- Each entry is a Suppression element; the warning names its diagnostic and the API it is about. -->
+    <ItemGroup>
+      <_MagicLinkApiBreak Text="$([System.Text.RegularExpressions.Regex]::Replace('%(Identity)', '(?s).*&lt;DiagnosticId&gt;(.*?)&lt;/DiagnosticId&gt;.*&lt;Target&gt;(.*?)&lt;/Target&gt;.*', '$1 on $2'))" />
+    </ItemGroup>
+    <Warning Code="MLAPI001"
+             Condition="'@(_MagicLinkApiBreak)' != ''"
+             Text="$(PackageId) breaks the public API of its last release $(PackageValidationBaselineVersion): %(_MagicLinkApiBreak.Text). Before 1.0 a break is reported, not failed; mark the commit as breaking with ! or BREAKING CHANGE: so the changelog says so. See https://learn.microsoft.com/dotnet/fundamentals/package-validation/diagnostic-ids" />
+  </Target>
+</Project>
