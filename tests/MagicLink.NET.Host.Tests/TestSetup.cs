@@ -61,7 +61,7 @@ internal sealed class TestSetup : IDisposable
         ["MagicLink:SignInFile:Path"] = PeopleFile,
         ["MagicLink:Smtp:Host"] = "127.0.0.1",
         ["MagicLink:Smtp:Port"] = smtpPort.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        ["MagicLink:Smtp:UseStartTls"] = "false",
+        ["MagicLink:Smtp:Security"] = "None",
         ["MagicLink:Smtp:From"] = "Sign-in <signin@example.com>",
         ["MagicLink:Clients:0:ClientId"] = PublicClient,
         ["MagicLink:Clients:0:RedirectUris:0"] = RedirectUri,

@@ -1,10 +1,12 @@
-using System.Net.Mail;
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Options;
 
 namespace MagicLink.Tests.Mail;
 
 // docs/specs/magiclink-net-send-the-sign-in-email-through-a-pluggable-sender.md, criterion 1 (issue #6): mail goes out
-// over SMTP by setting alone.
+// over SMTP by setting alone; criterion 3 (issue #54): over STARTTLS or TLS from the first byte, never unencrypted unless
+// set to.
 public sealed class SmtpSignInMessageSenderTests
 {
     private static readonly SignInMessage Message = new(
@@ -58,7 +60,7 @@ public sealed class SmtpSignInMessageSenderTests
         await using var server = new FakeSmtpServer(refuseRecipients: true);
         var sender = Sender(server);
 
-        await Assert.ThrowsAnyAsync<SmtpException>(() => sender.SendAsync(Message, Cancel).AsTask());
+        await Assert.ThrowsAnyAsync<SmtpCommandException>(() => sender.SendAsync(Message, Cancel).AsTask());
 
         Assert.Empty(server.Messages);
     }
@@ -89,16 +91,90 @@ public sealed class SmtpSignInMessageSenderTests
         Assert.Single(server.Messages);
     }
 
-    private static SmtpSignInMessageSender Sender(FakeSmtpServer server, Action<MagicLinkSmtpOptions>? configure = null)
+    [Fact]
+    public async Task The_email_goes_out_over_starttls_by_default()
+    {
+        await using var server = new FakeSmtpServer(advertiseLogin: true, tls: FakeSmtpTls.StartTls);
+        var sender = Sender(server, options =>
+        {
+            options.Security = MagicLinkSmtpSecurity.StartTls;
+            options.UserName = "mailer";
+            options.Password = "mailer-password";
+        }, trustServer: true);
+
+        await sender.SendAsync(Message, Cancel);
+
+        var received = Assert.Single(server.Messages);
+        Assert.True(received.Secure);
+        Assert.Equal("mailer", received.UserName);
+        Assert.Contains(Message.Link.AbsoluteUri, Mime.Body(received.Data), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_email_goes_out_over_tls_from_the_first_byte_as_on_port_465()
+    {
+        await using var server = new FakeSmtpServer(advertiseLogin: true, tls: FakeSmtpTls.Implicit);
+        var sender = Sender(server, options =>
+        {
+            options.Security = MagicLinkSmtpSecurity.ImplicitTls;
+            options.UserName = "mailer";
+            options.Password = "mailer-password";
+        }, trustServer: true);
+
+        await sender.SendAsync(Message, Cancel);
+
+        var received = Assert.Single(server.Messages);
+        Assert.True(received.Secure);
+        Assert.Equal("mailer-password", received.Password);
+    }
+
+    [Fact]
+    public async Task A_server_without_starttls_gets_no_email_rather_than_an_unencrypted_one()
+    {
+        await using var server = new FakeSmtpServer();
+        var sender = Sender(server, options => options.Security = MagicLinkSmtpSecurity.StartTls, trustServer: true);
+
+        await Assert.ThrowsAnyAsync<NotSupportedException>(() => sender.SendAsync(Message, Cancel).AsTask());
+
+        Assert.Empty(server.Messages);
+    }
+
+    [Fact]
+    public async Task A_server_certificate_the_system_does_not_trust_gets_no_email()
+    {
+        await using var server = new FakeSmtpServer(tls: FakeSmtpTls.Implicit);
+        var sender = Sender(server, options => options.Security = MagicLinkSmtpSecurity.ImplicitTls);
+
+        await Assert.ThrowsAnyAsync<SslHandshakeException>(() => sender.SendAsync(Message, Cancel).AsTask());
+
+        Assert.Empty(server.Messages);
+    }
+
+    [Fact]
+    public void Starttls_is_the_default()
+    {
+        Assert.Equal(MagicLinkSmtpSecurity.StartTls, new MagicLinkSmtpOptions().Security);
+    }
+
+    private static SmtpSignInMessageSender Sender(
+        FakeSmtpServer server, Action<MagicLinkSmtpOptions>? configure = null, bool trustServer = false)
     {
         var options = new MagicLinkSmtpOptions
         {
             Host = "127.0.0.1",
             Port = server.Port,
-            UseStartTls = false,
+            Security = MagicLinkSmtpSecurity.None,
             From = "Sign-in <signin@example.com>",
         };
         configure?.Invoke(options);
-        return new SmtpSignInMessageSender(Options.Create(options));
+
+        // The test server's certificate is its own; trusting exactly that one keeps the rest of the check.
+        var expected = server.Certificate?.GetCertHashString();
+        return new SmtpSignInMessageSender(Options.Create(options))
+        {
+            CertificateValidation = trustServer
+                ? (_, certificate, _, _) => certificate is not null && string.Equals(certificate.GetCertHashString(), expected, StringComparison.Ordinal)
+                : null,
+        };
     }
 }

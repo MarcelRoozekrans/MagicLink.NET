@@ -314,7 +314,7 @@ jobs:
             -e MagicLink__SignInFile__Path=/run/magiclink/people.json \
             -e MagicLink__Smtp__Host=localhost \
             -e MagicLink__Smtp__Port=1025 \
-            -e MagicLink__Smtp__UseStartTls=false \
+            -e MagicLink__Smtp__Security=None \
             -e "MagicLink__Smtp__From=Sign-in <signin@example.com>" \
             -e MagicLink__Clients__0__ClientId=host-test-cli \
             -e MagicLink__Clients__0__RedirectUris__0=http://localhost/callback \

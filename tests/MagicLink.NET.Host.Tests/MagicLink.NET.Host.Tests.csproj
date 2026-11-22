@@ -15,6 +15,7 @@
   <!-- The SMTP server the in-process host sends its email to, and a database of its own per test class. -->
   <ItemGroup>
     <Compile Include="..\MagicLink.NET.Tests\Mail\FakeSmtpServer.cs" Link="Mail\FakeSmtpServer.cs" />
+    <Compile Include="..\MagicLink.NET.Tests\Mail\FakeSmtpTls.cs" Link="Mail\FakeSmtpTls.cs" />
     <Compile Include="..\MagicLink.NET.Tests\Mail\Mime.cs" Link="Mail\Mime.cs" />
     <Compile Include="..\MagicLink.NET.PostgreSql.Tests\PostgresDatabase.cs" Link="PostgresDatabase.cs" />
   </ItemGroup>

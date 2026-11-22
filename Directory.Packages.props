@@ -20,8 +20,9 @@
     <PackageVersion Include="OpenIddict.Validation.ServerIntegration" Version="7.9.0" />
   </ItemGroup>
 
-  <!-- Retrying the sign-in email (ADR-015) -->
+  <!-- Sending the sign-in email over SMTP (ADR-015, amended 2026-11-22) and retrying it -->
   <ItemGroup>
+    <PackageVersion Include="MailKit" Version="5.0.0" />
     <PackageVersion Include="ZeroAlloc.Resilience" Version="3.5.1" />
   </ItemGroup>
 

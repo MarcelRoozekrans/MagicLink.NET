@@ -50,7 +50,7 @@ Every setting comes from an environment variable, or from an `appsettings.json` 
 | `MagicLink__EncryptionCertificate__Path`, `__Password` | The same for the certificate that encrypts tokens. |
 | `MagicLink__SignInFile__Path` | The file of who may sign in and with which groups, kept in git. |
 | `MagicLink__SignInDatabase__ConnectionString`, `__Query` | Instead of the file: a query on an existing PostgreSQL database. SQL Server works only when an app hosts MagicLink.NET, because its client library does not run under Native AOT. |
-| `MagicLink__Smtp__Host`, `__Port`, `__UseStartTls`, `__UserName`, `__Password`, `__From`, `__Subject` | The SMTP server that sends the sign-in email. |
+| `MagicLink__Smtp__Host`, `__Port`, `__Security`, `__UserName`, `__Password`, `__From`, `__Subject` | The SMTP server that sends the sign-in email. `__Security` is `StartTls` by default, on port 587 or 25; `ImplicitTls` for TLS from the first byte, on port 465; or `None`, only for a server on the same host or network. |
 | `MagicLink__CodeLifetime`, `MagicLink__MaxCodeAttempts` | How long a code works, `00:10:00` by default, and how often it may be tried, 5 by default. |
 | `MagicLink__MaxEmailsPerAddress`, `MagicLink__EmailLimitWindow` | How many sign-in emails one address gets, 5 by default, within a window of `00:15:00` by default. |
 | `MagicLink__Clients__0__ClientId` | An application that may sign people in. Number the clients from 0. |

@@ -1,12 +1,15 @@
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 
 namespace MagicLink.Tests.Mail;
 
 /// <summary>
-/// An SMTP server on the loopback address that speaks just enough SMTP for SmtpClient, without TLS, and keeps what
-/// it receives.
+/// An SMTP server on the loopback address that speaks just enough SMTP for MailKit, without TLS, with STARTTLS or with
+/// TLS from the first byte, and keeps what it receives.
 /// </summary>
 internal sealed class FakeSmtpServer : IAsyncDisposable
 {
@@ -19,14 +22,23 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
     /// <param name="advertiseLogin">Whether the server asks clients to sign in with AUTH LOGIN.</param>
     /// <param name="refuseRecipients">Whether the server refuses every recipient, as for an address it does not know.</param>
     /// <param name="withholdDataReply">Whether the server never answers the end of an email, as a stalled server would.</param>
-    public FakeSmtpServer(bool advertiseLogin = false, bool refuseRecipients = false, bool withholdDataReply = false)
+    /// <param name="tls">Whether and how the server offers TLS.</param>
+    public FakeSmtpServer(
+        bool advertiseLogin = false, bool refuseRecipients = false, bool withholdDataReply = false, FakeSmtpTls tls = FakeSmtpTls.None)
     {
+        Tls = tls;
+        Certificate = tls == FakeSmtpTls.None ? null : CreateCertificate();
         AdvertiseLogin = advertiseLogin;
         RefuseRecipients = refuseRecipients;
         WithholdDataReply = withholdDataReply;
         _listener.Start();
         _serving = ServeAsync();
     }
+
+    public FakeSmtpTls Tls { get; }
+
+    /// <summary>The server's own certificate, for "localhost", which no system trusts; null without TLS.</summary>
+    public X509Certificate2? Certificate { get; }
 
     public bool AdvertiseLogin { get; }
 
@@ -63,6 +75,7 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
         }
 
         _stop.Dispose();
+        Certificate?.Dispose();
     }
 
     private async Task ServeAsync()
@@ -78,10 +91,16 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
     {
         using (client)
         {
-            var stream = client.GetStream();
-            using var reader = new StreamReader(stream, Encoding.ASCII);
-            await using var writer = new StreamWriter(stream, Encoding.ASCII) { NewLine = "\r\n", AutoFlush = true };
-            var current = new Received();
+            Stream stream = client.GetStream();
+            var secure = false;
+            if (Tls == FakeSmtpTls.Implicit)
+            {
+                stream = await SecureAsync(stream);
+                secure = true;
+            }
+
+            var (reader, writer) = Talk(stream);
+            var current = new Received { Secure = secure };
             await writer.WriteLineAsync("220 fake ESMTP");
             while (await reader.ReadLineAsync() is { } line)
             {
@@ -89,7 +108,15 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
                 switch (verb)
                 {
                     case "EHLO":
-                        await writer.WriteLineAsync(AdvertiseLogin ? "250-fake\r\n250-AUTH LOGIN\r\n250 OK" : "250-fake\r\n250 OK");
+                        await writer.WriteLineAsync(Hello(secure));
+                        break;
+
+                    case "STARTTLS" when Tls == FakeSmtpTls.StartTls && !secure:
+                        await writer.WriteLineAsync("220 Ready to start TLS");
+                        stream = await SecureAsync(stream);
+                        secure = true;
+                        (reader, writer) = Talk(stream);
+                        current = new Received { Secure = true };
                         break;
 
                     case "AUTH":
@@ -108,7 +135,7 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
 
                     case "DATA":
                         await ReceiveAsync(reader, writer, current);
-                        current = new Received();
+                        current = new Received { Secure = secure };
                         break;
 
                     case "QUIT":
@@ -121,6 +148,38 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
                 }
             }
         }
+    }
+
+    /// <summary>The answer to EHLO: what the server offers, STARTTLS only before the connection is secure.</summary>
+    private string Hello(bool secure)
+    {
+        var startTls = Tls == FakeSmtpTls.StartTls && !secure ? "250-STARTTLS\r\n" : string.Empty;
+        var login = AdvertiseLogin ? "250-AUTH LOGIN\r\n" : string.Empty;
+        return $"250-fake\r\n{startTls}{login}250 OK";
+    }
+
+    /// <summary>Reads and writes SMTP lines on the stream; leaves the stream open, since STARTTLS replaces the reader.</summary>
+    private static (StreamReader Reader, StreamWriter Writer) Talk(Stream stream) =>
+        (new StreamReader(stream, Encoding.ASCII, leaveOpen: true),
+         new StreamWriter(stream, Encoding.ASCII, leaveOpen: true) { NewLine = "\r\n", AutoFlush = true });
+
+    private async Task<Stream> SecureAsync(Stream stream)
+    {
+        var tls = new SslStream(stream, leaveInnerStreamOpen: false);
+        await tls.AuthenticateAsServerAsync(Certificate!, clientCertificateRequired: false, checkCertificateRevocation: false);
+        return tls;
+    }
+
+    private static X509Certificate2 CreateCertificate()
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest("CN=localhost", key, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var names = new SubjectAlternativeNameBuilder();
+        names.AddDnsName("localhost");
+        names.AddIpAddress(IPAddress.Loopback);
+        request.CertificateExtensions.Add(names.Build());
+        using var certificate = request.CreateSelfSigned(DateTimeOffset.UtcNow.AddMinutes(-5), DateTimeOffset.UtcNow.AddHours(1));
+        return X509CertificateLoader.LoadPkcs12(certificate.Export(X509ContentType.Pkcs12), password: null);
     }
 
     /// <summary>AUTH LOGIN, with the user name on the AUTH line or after the server asks for it.</summary>
@@ -170,6 +229,9 @@ internal sealed class FakeSmtpServer : IAsyncDisposable
 
     internal sealed class Received
     {
+        /// <summary>Whether the email came in over TLS.</summary>
+        public bool Secure { get; set; }
+
         public string? UserName { get; set; }
 
         public string? Password { get; set; }

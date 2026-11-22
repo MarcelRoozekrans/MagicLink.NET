@@ -14,11 +14,10 @@ public sealed class MagicLinkSmtpOptions
     public int Port { get; set; } = 587;
 
     /// <summary>
-    /// Whether the connection is upgraded to TLS with STARTTLS before anything is sent. Defaults to <see langword="true"/>:
-    /// the email holds a link and a code that sign the person in, so turn this off only for a server on the same host
-    /// or network. Port 465, TLS from the first byte, is not supported.
+    /// How the connection to the server is protected. Defaults to <see cref="MagicLinkSmtpSecurity.StartTls"/>; use
+    /// <see cref="MagicLinkSmtpSecurity.ImplicitTls"/> for a server on port 465.
     /// </summary>
-    public bool UseStartTls { get; set; } = true;
+    public MagicLinkSmtpSecurity Security { get; set; } = MagicLinkSmtpSecurity.StartTls;
 
     /// <summary>The user name to sign in to the SMTP server with, or <see langword="null"/> to send without signing in.</summary>
     public string? UserName { get; set; }
