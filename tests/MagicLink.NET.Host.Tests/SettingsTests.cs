@@ -47,7 +47,7 @@ public sealed class SettingsTests(PostgresDatabase database) : IClassFixture<Pos
         Assert.Equal(50, codes.MaxSignInsPerClient);
         Assert.Equal(TimeSpan.FromMinutes(30), codes.ClientLimitWindow);
         Assert.Equal(2525, smtp.Port);
-        Assert.False(smtp.UseStartTls);
+        Assert.Equal(MagicLinkSmtpSecurity.None, smtp.Security);
         Assert.Equal("mailer", smtp.UserName);
         Assert.Equal("Sign in to Example", smtp.Subject);
     }

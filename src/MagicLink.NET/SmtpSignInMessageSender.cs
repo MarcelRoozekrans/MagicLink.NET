@@ -1,13 +1,17 @@
 using System.Globalization;
-using System.Net;
-using System.Net.Mail;
+using System.Net.Security;
+using MailKit;
+using MailKit.Net.Smtp;
+using MailKit.Security;
 using Microsoft.Extensions.Options;
+using MimeKit;
 
 namespace MagicLink;
 
 /// <summary>
 /// The default mail sender: sends the sign-in email over SMTP with the settings in <see cref="MagicLinkSmtpOptions"/>
-/// (ADR-015). It uses the SmtpClient that comes with .NET, which needs no extra package and runs under Native AOT.
+/// (ADR-015, amended 2026-11-22). It uses MailKit, which handles STARTTLS as well as TLS from the first byte on port
+/// 465, and runs under Native AOT.
 /// </summary>
 internal sealed class SmtpSignInMessageSender : ISignInMessageSender
 {
@@ -20,42 +24,52 @@ internal sealed class SmtpSignInMessageSender : ISignInMessageSender
         _options = options;
     }
 
+    /// <summary>
+    /// Checks the server's certificate instead of the system's trusted roots. Only tests set it, to trust the
+    /// certificate of their own server; <see langword="null"/> leaves the check to the system.
+    /// </summary>
+    internal RemoteCertificateValidationCallback? CertificateValidation { get; init; }
+
     /// <inheritdoc />
     public async ValueTask SendAsync(SignInMessage message, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(message);
 
         var options = _options.Value;
-        using var mail = new MailMessage(new MailAddress(options.From!), new MailAddress(message.Email))
-        {
-            Subject = options.Subject,
-            Body = Body(message),
-            IsBodyHtml = false,
-        };
+        using var mail = new MimeMessage();
+        mail.From.Add(MailboxAddress.Parse(options.From!));
+        mail.To.Add(MailboxAddress.Parse(message.Email));
+        mail.Subject = options.Subject;
+        mail.Body = new TextPart("plain") { Text = Body(message) };
 
-        // SmtpClient is not safe to share between sends that run at the same time, so each send has its own.
-        using var client = new SmtpClient(options.Host, options.Port)
+        // An SmtpClient is not safe to share between sends that run at the same time, so each send has its own.
+        using var client = new SmtpClient();
+        if (CertificateValidation is not null)
         {
-            EnableSsl = options.UseStartTls,
-            DeliveryMethod = SmtpDeliveryMethod.Network,
-        };
+            client.ServerCertificateValidationCallback = CertificateValidation;
+        }
+
+        await client.ConnectAsync(options.Host!, options.Port, Socket(options.Security), cancellationToken).ConfigureAwait(false);
         if (options.UserName is not null)
         {
-            client.Credentials = new NetworkCredential(options.UserName, options.Password);
+            await client.AuthenticateAsync(options.UserName, options.Password ?? string.Empty, cancellationToken).ConfigureAwait(false);
         }
 
-        // SmtpClient waits for the server's answer to the end of the email without watching the token, up to its own
-        // 100-second timeout. Cancelling therefore closes this send's connection, which ends that wait too.
-        using var abort = cancellationToken.Register(static state => ((SmtpClient)state!).Dispose(), client);
-        try
-        {
-            await client.SendMailAsync(mail, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException && cancellationToken.IsCancellationRequested)
-        {
-            throw new OperationCanceledException("Sending the sign-in email was cancelled.", exception, cancellationToken);
-        }
+        await client.SendAsync(new SendRequest(mail), cancellationToken).ConfigureAwait(false);
+        await client.DisconnectAsync(quit: true, cancellationToken).ConfigureAwait(false);
     }
+
+    /// <summary>
+    /// MailKit's name for each setting. STARTTLS is required, never "when available": a server that does not offer it
+    /// gets no email rather than one sent unencrypted (spec "send the sign-in email", criterion 3).
+    /// </summary>
+    private static SecureSocketOptions Socket(MagicLinkSmtpSecurity security) => security switch
+    {
+        MagicLinkSmtpSecurity.StartTls => SecureSocketOptions.StartTls,
+        MagicLinkSmtpSecurity.ImplicitTls => SecureSocketOptions.SslOnConnect,
+        MagicLinkSmtpSecurity.None => SecureSocketOptions.None,
+        _ => throw new ArgumentOutOfRangeException(nameof(security), security, "Unknown SMTP security setting."),
+    };
 
     /// <summary>The text of the email: the link to open in the browser that started the sign-in, and the code.</summary>
     private static string Body(SignInMessage message) => string.Create(CultureInfo.InvariantCulture, $"""

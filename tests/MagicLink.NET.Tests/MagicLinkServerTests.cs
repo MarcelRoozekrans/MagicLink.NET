@@ -65,6 +65,21 @@ public sealed class MagicLinkServerTests
     }
 
     [Fact]
+    public async Task MagicLink_does_not_start_with_an_unknown_smtp_security_setting()
+    {
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, smtp: static options =>
+        {
+            options.Host = "smtp.example.com";
+            options.From = "signin@example.com";
+            options.Security = (MagicLinkSmtpSecurity)42;
+        });
+
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("MagicLinkSmtpOptions.Security", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task MagicLink_does_not_start_with_an_empty_subject()
     {
         await using var app = Build(new Uri("https://magiclink.test/"), configure: null, smtp: static options =>
