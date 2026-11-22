@@ -27,6 +27,9 @@ public sealed class SignInHosts : IAsyncLifetime
 {
     public const string ClientId = "test-app";
 
+    /// <summary>A command-line tool that signs people in with the device authorization grant.</summary>
+    public const string CliClientId = "test-cli";
+
     /// <summary>The person who signs in, written as a person might type it.</summary>
     public const string Person = " Person@Example.com ";
 
@@ -41,6 +44,9 @@ public sealed class SignInHosts : IAsyncLifetime
 
     /// <summary>A person the file lists until a test takes them out.</summary>
     public const string RemovedLaterPerson = "removed-later@example.com";
+
+    /// <summary>A second person the file lists until a test takes them out.</summary>
+    public const string LeavesLaterPerson = "leaves-later@example.com";
 
     /// <summary>An address the file does not list.</summary>
     public const string UnlistedPerson = "unlisted@example.com";
@@ -57,7 +63,7 @@ public sealed class SignInHosts : IAsyncLifetime
 
     private readonly PostgresDatabase _database = new();
     private readonly string _directory = Directory.CreateTempSubdirectory("magiclink-signin-hosts-").FullName;
-    private readonly List<string> _listed = [NormalizedPerson, OneGroupPerson, NoGroupsPerson, RemovedLaterPerson];
+    private readonly List<string> _listed = [NormalizedPerson, OneGroupPerson, NoGroupsPerson, RemovedLaterPerson, LeavesLaterPerson];
     private readonly Dictionary<string, string[]> _movedTo = new(StringComparer.Ordinal);
     private WebApplication? _magicLink;
     private WebApplication? _app;
@@ -214,6 +220,19 @@ public sealed class SignInHosts : IAsyncLifetime
                 Permissions.Scopes.Email,
             },
             Requirements = { Requirements.Features.ProofKeyForCodeExchange },
+        });
+        await manager.CreateAsync(new OpenIddictApplicationDescriptor
+        {
+            ClientId = CliClientId,
+            ClientType = ClientTypes.Public,
+            Permissions =
+            {
+                Permissions.Endpoints.DeviceAuthorization,
+                Permissions.Endpoints.Token,
+                Permissions.GrantTypes.DeviceCode,
+                Permissions.GrantTypes.RefreshToken,
+                Permissions.Scopes.Email,
+            },
         });
     }
 

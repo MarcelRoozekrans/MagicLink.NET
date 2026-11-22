@@ -23,8 +23,10 @@ internal static partial class MagicLinkEndpoints
     public const string AuthorizationPath = "connect/authorize";
     public const string TokenPath = "connect/token";
     public const string UserInfoPath = "connect/userinfo";
+    public const string DeviceAuthorizationPath = "connect/device";
+    public const string VerificationPath = "connect/verify";
 
-    /// <summary>Maps the authorization and token endpoints, and the sign-in page.</summary>
+    /// <summary>Maps the authorization and token endpoints, the sign-in page, and the page where a person approves a device.</summary>
     public static IEndpointRouteBuilder MapMagicLinkEndpoints(this IEndpointRouteBuilder endpoints)
     {
         ArgumentNullException.ThrowIfNull(endpoints);
@@ -32,6 +34,7 @@ internal static partial class MagicLinkEndpoints
         endpoints.MapMethods("/" + AuthorizationPath, [HttpMethods.Get, HttpMethods.Post], new RequestDelegate(AuthorizeAsync));
         endpoints.MapPost("/" + TokenPath, new RequestDelegate(TokenAsync));
         endpoints.MapSignInPage();
+        endpoints.MapDevicePage();
         return endpoints;
     }
 
@@ -44,11 +47,8 @@ internal static partial class MagicLinkEndpoints
         var request = context.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("OpenIddict did not attach the authorization request.");
 
-        var session = await context.AuthenticateAsync(MagicLinkSession.Scheme).ConfigureAwait(false);
-        var email = session.Succeeded ? session.Principal.FindFirst(Claims.Email)?.Value : null;
-        var signedInAt = session.Properties?.IssuedUtc;
-
-        if (email is null || signedInAt is null || MustSignInAgain(request, signedInAt.Value, context.RequestServices.GetRequiredService<TimeProvider>()))
+        var session = await MagicLinkSession.FindAsync(context).ConfigureAwait(false);
+        if (session is not var (email, signedInAt) || MustSignInAgain(request, signedInAt, context.RequestServices.GetRequiredService<TimeProvider>()))
         {
             if (request.HasPromptValue(PromptValues.None))
             {
@@ -71,21 +71,21 @@ internal static partial class MagicLinkEndpoints
             return;
         }
 
-        var identity = MagicLinkIdentity.Create(email, signedInAt.Value, request.GetScopes(), access.Groups);
+        var identity = MagicLinkIdentity.Create(email, signedInAt, request.GetScopes(), access.Groups);
         await context.SignInAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, new ClaimsPrincipal(identity)).ConfigureAwait(false);
     }
 
     /// <summary>
-    /// Exchanges an authorization code or a refresh token for tokens carrying the identity the code or refresh token was
-    /// issued for.
+    /// Exchanges an authorization code, a refresh token or an approved device code for tokens carrying the identity it
+    /// was issued for.
     /// </summary>
     internal static async Task TokenAsync(HttpContext context)
     {
         var request = context.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("OpenIddict did not attach the token request.");
 
-        // OpenIddict rejects every grant type the server does not allow, so only these two get here.
-        if (!request.IsAuthorizationCodeGrantType() && !request.IsRefreshTokenGrantType())
+        // OpenIddict rejects every grant type the server does not allow, so only these three get here.
+        if (!request.IsAuthorizationCodeGrantType() && !request.IsRefreshTokenGrantType() && !request.IsDeviceCodeGrantType())
         {
             throw new InvalidOperationException($"The grant type '{request.GrantType}' is not handled.");
         }
@@ -93,7 +93,7 @@ internal static partial class MagicLinkEndpoints
         var result = await context.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme).ConfigureAwait(false);
         if (!result.Succeeded)
         {
-            await context.ForbidAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, Error(Errors.InvalidGrant, "The authorization code or refresh token is no longer valid.")).ConfigureAwait(false);
+            await context.ForbidAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, Error(Errors.InvalidGrant, "The authorization code, refresh token or device code is no longer valid.")).ConfigureAwait(false);
             return;
         }
 
@@ -102,9 +102,7 @@ internal static partial class MagicLinkEndpoints
         {
             // A refresh can extend a session for weeks, so the source is asked again, as on every authorization: a person
             // taken out of it gets no new tokens, and a person moved to other groups gets tokens with the new ones.
-            var email = principal.GetClaim(Claims.Subject)
-                ?? throw new InvalidOperationException("A refresh token without a subject was accepted.");
-            var access = await context.RequestServices.GetRequiredService<ISignInSource>().LookUpAsync(email, context.RequestAborted).ConfigureAwait(false);
+            var access = await LookUpAgainAsync(context, principal).ConfigureAwait(false);
             if (!access.MaySignIn)
             {
                 RefreshRefused(Logger(context));
@@ -115,7 +113,21 @@ internal static partial class MagicLinkEndpoints
             // Without a scope parameter a refresh keeps every scope of the refresh token; OpenIddict has already refused
             // a scope parameter that asks for more than that.
             var requested = request.GetScopes();
-            MagicLinkIdentity.PrepareRefresh(principal, access.Groups, requested.IsEmpty ? principal.GetScopes() : requested);
+            MagicLinkIdentity.PrepareForNewTokens(principal, access.Groups, requested.IsEmpty ? principal.GetScopes() : requested);
+        }
+        else if (request.IsDeviceCodeGrantType())
+        {
+            // The source was asked when the person approved the device, but a device may collect its tokens minutes
+            // later, so it is asked again, as for a refresh.
+            var access = await LookUpAgainAsync(context, principal).ConfigureAwait(false);
+            if (!access.MaySignIn)
+            {
+                DeviceCodeRefused(Logger(context));
+                await context.ForbidAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, Error(Errors.AccessDenied, "This email address may no longer sign in.")).ConfigureAwait(false);
+                return;
+            }
+
+            MagicLinkIdentity.PrepareForNewTokens(principal, access.Groups, principal.GetScopes());
         }
         else
         {
@@ -123,6 +135,14 @@ internal static partial class MagicLinkEndpoints
         }
 
         await context.SignInAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme, principal).ConfigureAwait(false);
+    }
+
+    /// <summary>Asks the source of who may sign in about the subject of a refresh token or device code.</summary>
+    internal static ValueTask<SignInAccess> LookUpAgainAsync(HttpContext context, ClaimsPrincipal principal)
+    {
+        var email = principal.GetClaim(Claims.Subject)
+            ?? throw new InvalidOperationException("A refresh token or device code without a subject was accepted.");
+        return context.RequestServices.GetRequiredService<ISignInSource>().LookUpAsync(email, context.RequestAborted);
     }
 
     /// <summary>
@@ -196,7 +216,10 @@ internal static partial class MagicLinkEndpoints
     [LoggerMessage(Level = LogLevel.Information, Message = "A refresh token was presented for a person who may no longer sign in, by the source of who may sign in; no tokens are issued.")]
     private static partial void RefreshRefused(ILogger logger);
 
-    private static AuthenticationProperties Error(string error, string description) => new(new Dictionary<string, string?>(StringComparer.Ordinal)
+    [LoggerMessage(Level = LogLevel.Information, Message = "An approved device code was presented for a person who may no longer sign in, by the source of who may sign in; no tokens are issued.")]
+    private static partial void DeviceCodeRefused(ILogger logger);
+
+    internal static AuthenticationProperties Error(string error, string description) => new(new Dictionary<string, string?>(StringComparer.Ordinal)
     {
         [OpenIddictServerAspNetCoreConstants.Properties.Error] = error,
         [OpenIddictServerAspNetCoreConstants.Properties.ErrorDescription] = description,

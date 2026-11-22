@@ -266,7 +266,7 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
     }
 
     [Fact]
-    public async Task Discovery_announces_the_code_flow_with_pkce_refresh_tokens_and_user_info()
+    public async Task Discovery_announces_the_code_flow_with_pkce_refresh_tokens_the_device_flow_and_user_info()
     {
         var browser = hosts.NewBrowser();
 
@@ -277,9 +277,10 @@ public sealed class BrowserSignInTests(SignInHosts hosts) : IClassFixture<SignIn
         Assert.Equal("https://magiclink.test/connect/authorize", root.GetProperty("authorization_endpoint").GetString());
         Assert.Equal("https://magiclink.test/connect/token", root.GetProperty("token_endpoint").GetString());
         Assert.Equal("https://magiclink.test/connect/userinfo", root.GetProperty("userinfo_endpoint").GetString());
+        Assert.Equal("https://magiclink.test/connect/device", root.GetProperty("device_authorization_endpoint").GetString());
         Assert.Contains("S256", Strings(root.GetProperty("code_challenge_methods_supported")), StringComparer.Ordinal);
         Assert.Contains("email", Strings(root.GetProperty("scopes_supported")), StringComparer.Ordinal);
         Assert.Contains("offline_access", Strings(root.GetProperty("scopes_supported")), StringComparer.Ordinal);
-        Assert.Equal(["authorization_code", "refresh_token"], Strings(root.GetProperty("grant_types_supported")).Order(StringComparer.Ordinal), StringComparer.Ordinal);
+        Assert.Equal(["authorization_code", "refresh_token", "urn:ietf:params:oauth:grant-type:device_code"], Strings(root.GetProperty("grant_types_supported")).Order(StringComparer.Ordinal), StringComparer.Ordinal);
     }
 }
