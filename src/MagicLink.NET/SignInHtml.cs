@@ -76,6 +76,35 @@ internal static class SignInHtml
             "<p>The link or code was already used, has expired, or was typed wrong too often. " +
             "Go back to the application and sign in again.</p>");
 
+    /// <summary>
+    /// The page where a person approves a command-line tool or device: it shows who they are signed in as and asks for
+    /// the user code the device shows, filled in when the address held it.
+    /// </summary>
+    public static Task DeviceFormAsync(HttpContext context, AntiforgeryTokenSet antiforgery, string email, string userCode, string? error, int status) =>
+        WriteAsync(context, status, "Sign in on your device", new StringBuilder()
+            .Append("<h1>Sign in on your device</h1>")
+            .Append("<p>Type the code your device shows to sign it in as ").Append(Encode(email)).Append(". ")
+            .Append("Only do this for a device you started signing in yourself.</p>")
+            .Append(Error(error))
+            .Append("<form method=\"post\" action=\"").Append(Encode(Action(context, DevicePage.Path))).Append("\">")
+            .Append(Hidden(antiforgery.FormFieldName, antiforgery.RequestToken!))
+            .Append("<label for=\"user_code\">Code from your device</label>")
+            .Append("<input id=\"user_code\" name=\"").Append(DevicePage.UserCodeField).Append("\" autocomplete=\"off\" autocapitalize=\"characters\" spellcheck=\"false\" required autofocus value=\"")
+            .Append(Encode(userCode)).Append("\">")
+            .Append("<button type=\"submit\">Sign in on the device</button>")
+            .Append("</form>")
+            .ToString());
+
+    /// <summary>The page after a device was approved.</summary>
+    public static Task DeviceDoneAsync(HttpContext context) =>
+        WriteAsync(context, StatusCodes.Status200OK, "Signed in", "<h1>Your device is signed in</h1>" +
+            "<p>Go back to your device. You can close this page.</p>");
+
+    /// <summary>The page after a device was refused, because the person may not sign in.</summary>
+    public static Task DeviceDeniedAsync(HttpContext context) =>
+        WriteAsync(context, StatusCodes.Status403Forbidden, "Not signed in", "<h1>Your device is not signed in</h1>" +
+            "<p>This email address may not sign in.</p>");
+
     /// <summary>The page for a request this page cannot handle, such as a form without its antiforgery token.</summary>
     public static Task BadRequestAsync(HttpContext context) =>
         WriteAsync(context, StatusCodes.Status400BadRequest, "Sign in again", "<h1>Something went wrong</h1>" +

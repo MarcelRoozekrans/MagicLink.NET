@@ -191,9 +191,11 @@ jobs:
           echo "The native binary did not answer within 60 seconds." >&2
           exit 1
 
+      # The restart test runs the proof in-process on a database of its own on the same server.
       - name: Run the flow tests against the native binary
         env:
           MAGICLINK_AOT_PROOF_URL: http://127.0.0.1:5099
+          MAGICLINK_TEST_POSTGRES: "Host=localhost;Port=5432;Username=magiclink;Password=magiclink;Database=magiclink"
         run: dotnet test --project tests/MagicLink.NET.AotProof.Tests -c Release
 
       # The binary seeded the hourly pruning job at startup. Make that run due now and wait for the native worker to

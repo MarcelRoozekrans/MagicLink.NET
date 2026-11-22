@@ -4,8 +4,8 @@ using static OpenIddict.Abstractions.OpenIddictConstants;
 namespace MagicLink.AotProof;
 
 /// <summary>
-/// Registers the proof's fixed client when the app starts. When it already exists, it is left alone, so a restart on
-/// the same PostgreSQL database works. Proof-only.
+/// Registers the proof's fixed client when the app starts. When it already exists, it is updated to match, so a restart
+/// on the same PostgreSQL database works and gets the client's current permissions. Proof-only.
 /// </summary>
 internal sealed class ProofClientRegistration(IServiceProvider services) : IHostedService
 {
@@ -17,9 +17,14 @@ internal sealed class ProofClientRegistration(IServiceProvider services) : IHost
             var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
             foreach (var client in Clients())
             {
-                if (await manager.FindByClientIdAsync(client.ClientId!, cancellationToken).ConfigureAwait(false) is null)
+                var existing = await manager.FindByClientIdAsync(client.ClientId!, cancellationToken).ConfigureAwait(false);
+                if (existing is null)
                 {
                     await manager.CreateAsync(client, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    await manager.UpdateAsync(existing, client, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
@@ -37,8 +42,10 @@ internal sealed class ProofClientRegistration(IServiceProvider services) : IHost
             Permissions =
             {
                 Permissions.Endpoints.Authorization,
+                Permissions.Endpoints.DeviceAuthorization,
                 Permissions.Endpoints.Token,
                 Permissions.GrantTypes.AuthorizationCode,
+                Permissions.GrantTypes.DeviceCode,
                 Permissions.GrantTypes.RefreshToken,
                 Permissions.ResponseTypes.Code,
                 Permissions.Prefixes.Scope + Scopes.OfflineAccess,

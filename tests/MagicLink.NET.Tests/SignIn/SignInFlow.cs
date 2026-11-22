@@ -9,9 +9,9 @@ internal static class SignInFlow
 
     /// <summary>
     /// Opens <paramref name="address"/> and follows redirects. When that lands on the sign-in page, the person types
-    /// their address and then the code from the email, and the browser goes on to where the sign-in started.
+    /// <paramref name="email"/> and then the code from the email, and the browser goes on to where the sign-in started.
     /// </summary>
-    public static async Task<HttpResponseMessage> SignInAsync(this SignInHosts hosts, Browser browser, Uri address, string? stopAtHost = null)
+    public static async Task<HttpResponseMessage> SignInAsync(this SignInHosts hosts, Browser browser, Uri address, string? stopAtHost = null, string email = SignInHosts.Person)
     {
         var response = await browser.NavigateAsync(address, stopAtHost);
         if (!IsEmailForm(browser, response))
@@ -22,7 +22,7 @@ internal static class SignInFlow
         SignInMessage message;
         using (response)
         {
-            message = await hosts.StartAsync(browser, response);
+            message = await hosts.StartAsync(browser, response, email);
         }
 
         using var confirmed = await TypeCodeAsync(browser, message.Code);
