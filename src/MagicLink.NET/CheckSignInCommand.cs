@@ -12,7 +12,7 @@ namespace MagicLink;
 /// 0 when the address may sign in, 1 when it may not, and 2 when that cannot be told, because the source cannot answer or
 /// the arguments are not one email address.
 /// </remarks>
-internal static class CheckSignInCommand
+public static class CheckSignInCommand
 {
     /// <summary>The name of the command, its first argument.</summary>
     public const string Name = "check-sign-in";

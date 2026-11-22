@@ -59,6 +59,8 @@ Every setting comes from an environment variable, or from an `appsettings.json` 
 | `MagicLink__Clients__0__Scopes__0` | `email`, and `offline_access` for refresh tokens. Every client may ask for `openid`. |
 | `MagicLink__Clients__0__DisplayName` | The name of the application, for people. |
 
+`docker run magiclink-net check-sign-in ann@example.com`, with the same settings, shows whether an address may sign in and with which groups, without starting the server. It exits with 0 when the address may sign in, 1 when it may not, and 2 when that cannot be told.
+
 The clients in the settings are the full list: each start adds new ones, updates changed ones and removes clients that are no longer listed, with their tokens. The container does not start while a setting is missing or wrong, and names each one.
 
 OpenID Connect needs HTTPS. Either let Kestrel serve it, with `ASPNETCORE_URLS=https://+:8443` and the certificate in `ASPNETCORE_Kestrel__Certificates__Default__Path` and `__Password`, or put a proxy in front that ends TLS and set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`. That setting trusts the forwarded headers of any caller, so the container must then be reachable through the proxy only.
