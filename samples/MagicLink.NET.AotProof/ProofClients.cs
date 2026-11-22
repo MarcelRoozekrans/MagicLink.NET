@@ -3,7 +3,7 @@ namespace MagicLink.AotProof;
 /// <summary>The fixed client, person and settings of the Native AOT proof. Proof-only values.</summary>
 public static class ProofClients
 {
-    /// <summary>A public client that uses the authorization code flow with PKCE and refresh tokens.</summary>
+    /// <summary>A public client that uses the authorization code flow with PKCE, the device flow, and refresh tokens.</summary>
     public const string PublicClientId = "proof-cli";
 
     /// <summary>The redirect URI registered for <see cref="PublicClientId"/>.</summary>

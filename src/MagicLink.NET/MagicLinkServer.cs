@@ -11,8 +11,10 @@ namespace MagicLink;
 internal static class MagicLinkServer
 {
     /// <summary>
-    /// Adds the OpenID Connect server for browser sign-in: the authorization code flow with PKCE, refresh tokens for
-    /// applications that ask for <c>offline_access</c>, the person's session cookie, the sign-in page, and user info. The host still registers OpenIddict's store, through <c>AddCore</c>.
+    /// Adds the OpenID Connect server: the authorization code flow with PKCE for browser sign-in, the device
+    /// authorization grant for command-line tools, refresh tokens for applications that ask for <c>offline_access</c>,
+    /// the person's session cookie, the sign-in page, and user info. The host still registers OpenIddict's store, through
+    /// <c>AddCore</c>; it must store tokens, as the PostgreSQL store does.
     /// </summary>
     /// <param name="builder">OpenIddict's builder.</param>
     /// <param name="configure">
@@ -26,30 +28,7 @@ internal static class MagicLinkServer
 
         builder.AddServer(options =>
         {
-            options.SetAuthorizationEndpointUris(MagicLinkEndpoints.AuthorizationPath)
-                .SetTokenEndpointUris(MagicLinkEndpoints.TokenPath)
-                .SetUserInfoEndpointUris(MagicLinkEndpoints.UserInfoPath);
-
-            options.AllowAuthorizationCodeFlow()
-                .RequireProofKeyForCodeExchange();
-
-            // An application extends a session with a refresh token instead of a new email (Spec: run an OIDC provider,
-            // criterion 2). Each refresh gives a new refresh token, OpenIddict's default.
-            options.AllowRefreshTokenFlow();
-
-            options.RegisterScopes(Scopes.OpenId, Scopes.Email, Scopes.OfflineAccess);
-            options.RegisterClaims(Claims.Subject, Claims.Email, Claims.EmailVerified, Claims.AuthenticationTime, MagicLinkIdentity.GroupsClaim);
-
-            // Applications and their APIs check access tokens as plain signed JWTs against the published keys, as with
-            // any other identity provider, so access tokens are signed but not encrypted.
-            options.DisableAccessTokenEncryption();
-
-            AddUserInfoClaims(options);
-
-            options.UseAspNetCore()
-                .EnableAuthorizationEndpointPassthrough()
-                .EnableTokenEndpointPassthrough();
-
+            ConfigureServer(options);
             configure(options);
         });
 
@@ -75,6 +54,41 @@ internal static class MagicLinkServer
         AddSignInMail(builder.Services);
 
         return builder;
+    }
+
+    /// <summary>The endpoints, flows, scopes and claims MagicLink.NET's server uses, before the host's own settings.</summary>
+    private static void ConfigureServer(OpenIddictServerBuilder options)
+    {
+        options.SetAuthorizationEndpointUris(MagicLinkEndpoints.AuthorizationPath)
+            .SetTokenEndpointUris(MagicLinkEndpoints.TokenPath)
+            .SetUserInfoEndpointUris(MagicLinkEndpoints.UserInfoPath)
+            .SetDeviceAuthorizationEndpointUris(MagicLinkEndpoints.DeviceAuthorizationPath)
+            .SetEndUserVerificationEndpointUris(MagicLinkEndpoints.VerificationPath);
+
+        options.AllowAuthorizationCodeFlow()
+            .RequireProofKeyForCodeExchange();
+
+        // An application extends a session with a refresh token instead of a new email (Spec: run an OIDC provider,
+        // criterion 2). Each refresh gives a new refresh token, OpenIddict's default.
+        options.AllowRefreshTokenFlow();
+
+        // A command-line tool signs a person in with a user code the person types in a browser (Spec: run an OIDC
+        // provider, criterion 3).
+        options.AllowDeviceAuthorizationFlow();
+
+        options.RegisterScopes(Scopes.OpenId, Scopes.Email, Scopes.OfflineAccess);
+        options.RegisterClaims(Claims.Subject, Claims.Email, Claims.EmailVerified, Claims.AuthenticationTime, MagicLinkIdentity.GroupsClaim);
+
+        // Applications and their APIs check access tokens as plain signed JWTs against the published keys, as with
+        // any other identity provider, so access tokens are signed but not encrypted.
+        options.DisableAccessTokenEncryption();
+
+        AddUserInfoClaims(options);
+
+        options.UseAspNetCore()
+            .EnableAuthorizationEndpointPassthrough()
+            .EnableTokenEndpointPassthrough()
+            .EnableEndUserVerificationEndpointPassthrough();
     }
 
     /// <summary>

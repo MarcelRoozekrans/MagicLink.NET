@@ -80,6 +80,42 @@ public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
     }
 
     [Fact]
+    public async Task Device_flow_gives_a_cli_tokens_after_the_person_types_the_user_code()
+    {
+        using var deviceResponse = await PostDevice(new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["client_id"] = ProofClients.PublicClientId,
+            ["scope"] = "openid offline_access",
+        });
+        Assert.Equal(HttpStatusCode.OK, deviceResponse.StatusCode);
+        using var device = await ReadJson(deviceResponse);
+        var deviceCode = device.RootElement.GetProperty("device_code").GetString()!;
+        using (var pending = await PostToken(DeviceCodeGrant(deviceCode)))
+        {
+            Assert.Equal("authorization_pending", await Error(pending));
+        }
+
+        // The person opens the verification page in a browser, signs in there, and types the user code the CLI shows.
+        var browser = new ProofBrowser(Client);
+        using var verifyForm = await SignInAsync(browser, "/connect/verify");
+        Assert.Equal(HttpStatusCode.OK, verifyForm.StatusCode);
+        using (var approved = await browser.SubmitFormAsync(verifyForm, ("user_code", device.RootElement.GetProperty("user_code").GetString()!)))
+        {
+            Assert.Equal(HttpStatusCode.Redirect, approved.StatusCode);
+            using var done = await browser.NavigateAsync(ProofBrowser.PathOf(approved.Headers.Location!));
+            Assert.Equal(HttpStatusCode.OK, done.StatusCode);
+        }
+
+        using var tokens = await PostToken(DeviceCodeGrant(deviceCode));
+
+        Assert.Equal(HttpStatusCode.OK, tokens.StatusCode);
+        using var body = await ReadJson(tokens);
+        Assert.True(body.RootElement.TryGetProperty("refresh_token", out _));
+        using var me = await CallApiMe(body.RootElement.GetProperty("access_token").GetString()!);
+        Assert.Equal(ProofClients.TestPerson, me.RootElement.GetProperty("subject").GetString());
+    }
+
+    [Fact]
     public async Task Wrong_pkce_verifier_is_refused()
     {
         var code = await Authorize(ProofClients.PublicClientId, Challenge(NewVerifier()));
@@ -141,7 +177,23 @@ public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
     {
         var browser = new ProofBrowser(Client);
 
-        using var emailForm = await browser.NavigateAsync(AuthorizeUri(clientId, challenge));
+        using var response = await SignInAsync(browser, AuthorizeUri(clientId, challenge));
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var location = response.Headers.Location!;
+        Assert.StartsWith(RedirectUri, location.ToString(), StringComparison.Ordinal);
+        var query = QueryHelpers.ParseQuery(location.Query);
+        Assert.Equal("proof-state", query["state"].ToString());
+        return query["code"].ToString();
+    }
+
+    /// <summary>
+    /// Opens <paramref name="path"/> in <paramref name="browser"/>, which MagicLink.NET sends to its sign-in page; the
+    /// person types their address and then the code from the email, and the browser goes back to where it started.
+    /// Returns that last answer.
+    /// </summary>
+    private async Task<HttpResponseMessage> SignInAsync(ProofBrowser browser, string path)
+    {
+        using var emailForm = await browser.NavigateAsync(path);
         Assert.Equal(HttpStatusCode.OK, emailForm.StatusCode);
         var sentBefore = (await ReadMailboxAsync()).Count;
         using (var sent = await browser.SubmitFormAsync(emailForm, ("email", ProofClients.TestPerson)))
@@ -155,13 +207,7 @@ public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
         using var confirmed = await browser.SubmitFormAsync(codeForm, ("code", mailCode));
         Assert.Equal(HttpStatusCode.Redirect, confirmed.StatusCode);
 
-        using var response = await browser.NavigateAsync(ProofBrowser.PathOf(confirmed.Headers.Location!));
-        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
-        var location = response.Headers.Location!;
-        Assert.StartsWith(RedirectUri, location.ToString(), StringComparison.Ordinal);
-        var query = QueryHelpers.ParseQuery(location.Query);
-        Assert.Equal("proof-state", query["state"].ToString());
-        return query["code"].ToString();
+        return await browser.NavigateAsync(ProofBrowser.PathOf(confirmed.Headers.Location!));
     }
 
     /// <summary>The code of the sign-in email after the <paramref name="sentBefore"/> emails before it, which go out in the background.</summary>
@@ -198,6 +244,19 @@ public sealed class FlowTests(ProofHost host) : IClassFixture<ProofHost>
         ["code_verifier"] = verifier,
         ["redirect_uri"] = RedirectUri,
     });
+
+    private static Dictionary<string, string> DeviceCodeGrant(string deviceCode) => new(StringComparer.Ordinal)
+    {
+        ["grant_type"] = "urn:ietf:params:oauth:grant-type:device_code",
+        ["client_id"] = ProofClients.PublicClientId,
+        ["device_code"] = deviceCode,
+    };
+
+    private async Task<HttpResponseMessage> PostDevice(IEnumerable<KeyValuePair<string, string>> form)
+    {
+        using var content = new FormUrlEncodedContent(form);
+        return await Client.PostAsync("/connect/device", content, Cancel);
+    }
 
     private async Task<HttpResponseMessage> PostToken(IEnumerable<KeyValuePair<string, string>> form)
     {

@@ -54,6 +54,20 @@ internal static class MagicLinkSession
         return context.SignInAsync(Scheme, new ClaimsPrincipal(identity));
     }
 
+    /// <summary>
+    /// The person with a session in this browser: the address they proved and when they proved it; null without a
+    /// session.
+    /// </summary>
+    public static async Task<(string Email, DateTimeOffset SignedInAt)?> FindAsync(HttpContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        var session = await context.AuthenticateAsync(Scheme).ConfigureAwait(false);
+        var email = session.Succeeded ? session.Principal.FindFirst(Claims.Email)?.Value : null;
+        var signedInAt = session.Properties?.IssuedUtc;
+        return email is null || signedInAt is null ? null : (email, signedInAt.Value);
+    }
+
     /// <summary>Email addresses compare without regard to case or surrounding white space.</summary>
     public static string Normalize(string email) => email.Trim().ToLowerInvariant();
 }
