@@ -1,6 +1,6 @@
-using System.Net.Mail;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
+using MimeKit;
 
 namespace MagicLink;
 
@@ -34,7 +34,12 @@ internal sealed class SmtpSettingsCheck(IServiceProvider services) : IValidateOp
             failures.Add("MagicLinkSmtpOptions.Port must be between 1 and 65535.");
         }
 
-        if (!MailAddress.TryCreate(options.From, out _))
+        if (!Enum.IsDefined(options.Security))
+        {
+            failures.Add("MagicLinkSmtpOptions.Security must be StartTls, ImplicitTls or None.");
+        }
+
+        if (options.From is null || !MailboxAddress.TryParse(options.From, out _))
         {
             failures.Add("MagicLinkSmtpOptions.From must be the email address the sign-in email is sent from.");
         }
