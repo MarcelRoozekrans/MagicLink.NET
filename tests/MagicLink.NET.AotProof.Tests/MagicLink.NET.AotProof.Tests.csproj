@@ -12,6 +12,10 @@
     <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
     <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
   </ItemGroup>
+  <!-- A database of its own for the restart test, as the store's tests have. -->
+  <ItemGroup>
+    <Compile Include="..\MagicLink.NET.PostgreSql.Tests\PostgresDatabase.cs" Link="PostgresDatabase.cs" />
+  </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\samples\MagicLink.NET.AotProof\MagicLink.NET.AotProof.csproj" />
   </ItemGroup>
