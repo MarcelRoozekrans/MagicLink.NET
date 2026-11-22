@@ -59,6 +59,7 @@ public class SignInHosts : IAsyncLifetime
     private readonly PostgresDatabase _database = new();
     private readonly string _directory = Directory.CreateTempSubdirectory("magiclink-signin-hosts-").FullName;
     private readonly List<string> _listed = [NormalizedPerson, OneGroupPerson, NoGroupsPerson, RemovedLaterPerson];
+    private readonly Dictionary<string, string[]> _movedTo = new(StringComparer.Ordinal);
     private WebApplication? _magicLink;
     private WebApplication? _app;
 
@@ -123,6 +124,13 @@ public class SignInHosts : IAsyncLifetime
         await WritePeopleFileAsync();
     }
 
+    /// <summary>Gives <paramref name="email"/> other groups in the file, as a new commit would.</summary>
+    internal async Task MoveToGroupsAsync(string email, params string[] groups)
+    {
+        _movedTo[email] = groups;
+        await WritePeopleFileAsync();
+    }
+
     public async ValueTask InitializeAsync()
     {
         await WritePeopleFileAsync();
@@ -158,8 +166,9 @@ public class SignInHosts : IAsyncLifetime
 
     private async Task WritePeopleFileAsync()
     {
-        var people = _listed.Select(static email => email switch
+        var people = _listed.Select(email => email switch
         {
+            _ when _movedTo.TryGetValue(email, out var moved) => new Dictionary<string, object>(StringComparer.Ordinal) { ["email"] = email, ["groups"] = moved },
             NormalizedPerson => new Dictionary<string, object>(StringComparer.Ordinal) { ["email"] = "Person@Example.com", ["groups"] = PersonGroups },
             OneGroupPerson => new Dictionary<string, object>(StringComparer.Ordinal) { ["email"] = email, ["groups"] = new[] { "readers" } },
             _ => new Dictionary<string, object>(StringComparer.Ordinal) { ["email"] = email },
@@ -208,6 +217,7 @@ public class SignInHosts : IAsyncLifetime
                 Permissions.Endpoints.Authorization,
                 Permissions.Endpoints.Token,
                 Permissions.GrantTypes.AuthorizationCode,
+                Permissions.GrantTypes.RefreshToken,
                 Permissions.ResponseTypes.Code,
                 Permissions.Scopes.Email,
             },

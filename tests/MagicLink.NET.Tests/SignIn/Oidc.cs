@@ -62,6 +62,25 @@ internal static class Oidc
             }),
         });
 
+    public static Task<HttpResponseMessage> PostRefreshAsync(Browser browser, string refreshToken, string? scope = null)
+    {
+        var form = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["grant_type"] = "refresh_token",
+            ["client_id"] = SignInHosts.ClientId,
+            ["refresh_token"] = refreshToken,
+        };
+        if (scope is not null)
+        {
+            form["scope"] = scope;
+        }
+
+        return browser.SendAsync(new HttpRequestMessage(HttpMethod.Post, new Uri(SignInHosts.MagicLink, "/connect/token"))
+        {
+            Content = new FormUrlEncodedContent(form),
+        });
+    }
+
     public static async Task<JsonDocument> ReadJson(HttpResponseMessage response) =>
         await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(Cancel), cancellationToken: Cancel);
 

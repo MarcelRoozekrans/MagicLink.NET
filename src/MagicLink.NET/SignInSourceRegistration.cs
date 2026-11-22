@@ -1,15 +1,16 @@
+using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.DependencyInjection;
+using MagicLink;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
-namespace MagicLink;
+namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
 /// Registers the source of who may sign in and with which groups (ADR-014). There is one source: the one registered
 /// last replaces any registered before it.
 /// </summary>
-internal static class SignInSourceRegistration
+public static class SignInSourceRegistration
 {
     /// <summary>
     /// Reads who may sign in, and their groups, from a file kept in git; see <see cref="MagicLinkSignInFileOptions"/> for
@@ -26,6 +27,31 @@ internal static class SignInSourceRegistration
         services.Replace(ServiceDescriptor.Singleton<ISignInSource, SignInFileSource>());
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<MagicLinkSignInFileOptions>, SignInFileCheck>());
         services.AddOptions<MagicLinkSignInFileOptions>().ValidateOnStart();
+        return services;
+    }
+
+    /// <summary>
+    /// Reads who may sign in, and their groups, from an existing PostgreSQL or SQL Server database with a query; see
+    /// <see cref="MagicLinkSignInDatabaseOptions"/> for what the query returns. MagicLink.NET only reads from it, and does
+    /// not start when the query fails, and says why.
+    /// </summary>
+    /// <param name="services">The host's services.</param>
+    /// <param name="provider">
+    /// The ADO.NET provider of the database: <c>NpgsqlFactory.Instance</c> for PostgreSQL, or
+    /// <c>SqlClientFactory.Instance</c> for SQL Server.
+    /// </param>
+    /// <param name="configure">Sets the connection string and the query.</param>
+    public static IServiceCollection AddMagicLinkSignInDatabase(this IServiceCollection services, DbProviderFactory provider, Action<MagicLinkSignInDatabaseOptions> configure)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(provider);
+        ArgumentNullException.ThrowIfNull(configure);
+
+        services.Configure(configure);
+        services.Replace(ServiceDescriptor.Singleton(new SignInDatabaseProvider(provider)));
+        services.Replace(ServiceDescriptor.Singleton<ISignInSource, SignInDatabaseSource>());
+        services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<MagicLinkSignInDatabaseOptions>, SignInDatabaseCheck>());
+        services.AddOptions<MagicLinkSignInDatabaseOptions>().ValidateOnStart();
         return services;
     }
 

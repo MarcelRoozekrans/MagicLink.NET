@@ -149,6 +149,52 @@ public sealed class MagicLinkServerTests
         Assert.Single(app.Services.GetServices<ISignInSource>());
     }
 
+    [Fact]
+    public async Task MagicLink_does_not_start_with_a_database_of_who_may_sign_in_that_it_cannot_query_and_says_why()
+    {
+        // Nothing listens on port 1, so the start check cannot run the query.
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, source: static services => services.AddMagicLinkSignInDatabase(
+            Npgsql.NpgsqlFactory.Instance,
+            static options =>
+            {
+                options.ConnectionString = "Host=127.0.0.1;Port=1;Database=users;Username=reader;Password=unused;Timeout=2";
+                options.Query = "SELECT group_name FROM memberships WHERE email = @email";
+            }));
+
+        var exception = await Assert.ThrowsAsync<OptionsValidationException>(() => app.StartAsync(TestContext.Current.CancellationToken));
+
+        Assert.Contains("cannot run its query", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task The_database_replaces_the_file_and_only_the_source_in_use_is_checked()
+    {
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, source: static services =>
+        {
+            services.AddMagicLinkSignInFile(static options => options.Path = "not read");
+            services.AddMagicLinkSignInDatabase(Npgsql.NpgsqlFactory.Instance, static options => options.Query = "SELECT 1");
+        });
+
+        Assert.IsType<SignInDatabaseSource>(app.Services.GetRequiredService<ISignInSource>());
+        Assert.Single(app.Services.GetServices<ISignInSource>());
+
+        // The file is no longer the source, so its start check passes without a file to read.
+        Assert.NotNull(app.Services.GetRequiredService<IOptions<MagicLinkSignInFileOptions>>().Value);
+    }
+
+    [Fact]
+    public async Task An_own_source_replaces_the_database_and_needs_none_of_its_settings()
+    {
+        await using var app = Build(new Uri("https://magiclink.test/"), configure: null, source: static services =>
+        {
+            services.AddMagicLinkSignInDatabase(Npgsql.NpgsqlFactory.Instance, static _ => { });
+            services.AddMagicLinkSignInSource<OwnSource>();
+        });
+
+        Assert.IsType<OwnSource>(app.Services.GetRequiredService<ISignInSource>());
+        Assert.NotNull(app.Services.GetRequiredService<IOptions<MagicLinkSignInDatabaseOptions>>().Value);
+    }
+
     private static WebApplication Build(Uri? issuer, Action<MagicLinkOptions>? configure, Action<MagicLinkSmtpOptions>? smtp = null, ISignInMessageSender? sender = null, Action<IServiceCollection>? source = null)
     {
         var builder = WebApplication.CreateSlimBuilder(HostArgs);

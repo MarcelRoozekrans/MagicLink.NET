@@ -3,7 +3,7 @@ using System.Collections.Immutable;
 namespace MagicLink;
 
 /// <summary>What an <see cref="ISignInSource"/> says about an email address: whether it may sign in, and its groups.</summary>
-internal sealed class SignInAccess
+public sealed class SignInAccess
 {
     private SignInAccess(bool maySignIn, ImmutableArray<string> groups)
     {
