@@ -1,16 +1,16 @@
 using System.Data.Common;
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.DependencyInjection;
+using MagicLink;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Options;
 
-namespace MagicLink;
+namespace Microsoft.Extensions.DependencyInjection;
 
 /// <summary>
 /// Registers the source of who may sign in and with which groups (ADR-014). There is one source: the one registered
 /// last replaces any registered before it.
 /// </summary>
-internal static class SignInSourceRegistration
+public static class SignInSourceRegistration
 {
     /// <summary>
     /// Reads who may sign in, and their groups, from a file kept in git; see <see cref="MagicLinkSignInFileOptions"/> for

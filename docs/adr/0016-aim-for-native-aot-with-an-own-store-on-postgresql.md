@@ -35,3 +35,7 @@ Native AOT is therefore a requirement from now on. Two checks enforce it:
 
 * Every package under `src/` builds with `IsAotCompatible`, so a trim or AOT warning fails the build.
 * `aot-proof` is a required check on `main`. It runs what the proof app publishes: OpenIddict and `MagicLink.NET.PostgreSql`. The core package `MagicLink.NET` is not in that binary yet; the proof app moves onto it when the core gets its hosting API (issue #11), and from then on the job covers the core too.
+
+## Update (2026-11-22)
+
+The core has its hosting API (issue #11), and the proof app now hosts `MagicLink.NET` through it, on `MagicLink.NET.PostgreSql`. The native binary runs the core's sign-in page, its authorization and token endpoints and its background email, and the flow tests sign a person in through that page. The proof's own shortcuts that the core does not offer are gone with it: the fixed sign-in without a page, the client credentials grant, the device flow on a proof-only page, and the in-memory application store, which cannot hold the core's sign-in requests. The device flow returns to the proof through the core once the core offers it (issue #24).

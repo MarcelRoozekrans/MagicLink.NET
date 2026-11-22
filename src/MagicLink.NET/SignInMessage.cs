@@ -6,4 +6,4 @@ namespace MagicLink;
 /// <param name="Code">The short code to type where the sign-in started.</param>
 /// <param name="ExpiresAt">When link and code stop working.</param>
 /// <param name="RequestId">The sign-in request the email belongs to, as the log names it; it signs nobody in.</param>
-internal sealed record SignInMessage(string Email, Uri Link, string Code, DateTimeOffset ExpiresAt, string RequestId);
+public sealed record SignInMessage(string Email, Uri Link, string Code, DateTimeOffset ExpiresAt, string RequestId);
