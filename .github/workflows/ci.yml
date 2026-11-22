@@ -107,9 +107,12 @@ jobs:
           disable_search: true   # only the files above, not every *.xml the search finds
           fail_ci_if_error: false
 
-  # Packs every shipped project with a probe version, so a packaging break shows up on the pull
-  # request instead of in the release job. The version guard in Directory.Build.props refuses a
-  # pack without one.
+  # Packs every shipped project, so a packaging break shows up on the pull request instead of in the
+  # release job, and compares each package's public API with its last release on nuget.org
+  # (product-line ADR-252, issue #27). It packs at the patch after the version in
+  # .release-please-manifest.json, so the last release is the baseline; the version guard in
+  # Directory.Build.props refuses a pack without a version. While the baseline is below 1.0 a break
+  # is a warning, from 1.0 on it fails the pack; see Directory.Build.targets.
   pack:
     needs: build-test
     runs-on: ubuntu-latest
@@ -123,8 +126,26 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Test the API baseline lookup
+        run: bash .github/scripts/api-baselines.test.sh
+
+      - name: Look up the API baselines
+        run: |
+          set -euo pipefail
+          released=$(jq -er '.["."]' .release-please-manifest.json)
+          IFS=. read -r major minor patch <<< "$released"
+          version="$major.$minor.$((patch + 1))-ci"
+          echo "PACK_VERSION=$version" >> "$GITHUB_ENV"
+          mkdir -p artifacts
+          for project in src/*/*.csproj; do
+            dotnet msbuild "$project" -getProperty:PackageId -getProperty:IsPackable \
+              | jq -r 'select(.Properties.IsPackable == "true") | .Properties.PackageId'
+          done | bash .github/scripts/api-baselines.sh "$version" "$PWD/artifacts/api-baselines.props"
+
       - name: Pack
-        run: dotnet pack MagicLink.NET.slnx -c Release -p:Version=0.0.0-ci -o nupkg
+        run: >
+          dotnet pack MagicLink.NET.slnx -c Release -p:Version=$PACK_VERSION -o nupkg
+          -p:MagicLinkApiBaselines=$PWD/artifacts/api-baselines.props
 
       - name: Check that packages were written
         run: |
